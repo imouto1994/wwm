@@ -5,6 +5,11 @@
  * Uses IntersectionObserver to play/pause based on viewport visibility,
  * preventing bandwidth waste when many clips are on one page.
  *
+ * Audio: clips autoplay muted (required for autoplay policy). On hover,
+ * audio is unmuted so the player can hear the in-game sound effects.
+ * On mouse leave, audio is muted again. A small speaker icon in the
+ * corner indicates the current mute state.
+ *
  * iOS constraints: `muted` + `playsInline` are required for autoplay on
  * Safari. Low Power Mode may still reject .play() — the Promise rejection
  * is caught silently.
@@ -13,7 +18,7 @@
  */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 // Next.js auto-prefixes <Link> and <Image> with basePath, but NOT raw HTML
@@ -43,6 +48,7 @@ interface VideoClipProps {
 export function VideoClip({ src, className }: VideoClipProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasError, setHasError] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -58,6 +64,9 @@ export function VideoClip({ src, className }: VideoClipProps) {
           });
         } else {
           video.pause();
+          // Re-mute when scrolled out so it doesn't blare audio when scrolled back in
+          video.muted = true;
+          setIsMuted(true);
         }
       },
       { threshold: 0.5 }
@@ -65,6 +74,23 @@ export function VideoClip({ src, className }: VideoClipProps) {
 
     observer.observe(video);
     return () => observer.disconnect();
+  }, []);
+
+  // Unmute on hover so the player can hear in-game sound effects.
+  // Browsers require a user gesture before allowing unmuted playback —
+  // hover counts as a gesture since the video is already playing (muted autoplay).
+  const handleMouseEnter = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    setIsMuted(false);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = true;
+    setIsMuted(true);
   }, []);
 
   if (hasError) {
@@ -81,16 +107,35 @@ export function VideoClip({ src, className }: VideoClipProps) {
   }
 
   return (
-    <video
-      ref={videoRef}
-      muted
-      loop
-      playsInline
-      preload="none"
-      onError={() => setHasError(true)}
-      className={cn("rounded-lg border border-border bg-black", className)}
+    <div
+      className={cn("group relative", className)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <source src={resolveVideoSrc(src)} type="video/webm" />
-    </video>
+      <video
+        ref={videoRef}
+        muted
+        loop
+        playsInline
+        preload="none"
+        onError={() => setHasError(true)}
+        className="w-full h-full rounded-lg border border-border bg-black"
+      >
+        <source src={resolveVideoSrc(src)} type="video/webm" />
+      </video>
+
+      {/* Mute state indicator — shows in the bottom-right corner */}
+      <div className="absolute bottom-2 right-2 rounded-sm bg-black/60 p-1 text-white/70 opacity-0 transition-opacity group-hover:opacity-100">
+        {isMuted ? (
+          <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-3.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-3.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+          </svg>
+        ) : (
+          <svg className="size-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-3.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-3.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+          </svg>
+        )}
+      </div>
+    </div>
   );
 }

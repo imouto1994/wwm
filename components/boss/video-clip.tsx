@@ -21,6 +21,19 @@ import { cn } from "@/lib/utils";
 // that next.config.ts uses, so video src paths are correctly prefixed on GitHub Pages.
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
+/**
+ * Resolves the video src, prepending basePath only for relative paths.
+ * Tina Cloud rewrites local media paths (e.g. "/uploads/moves/foo.webm") into
+ * absolute CDN URLs (e.g. "https://assets.tina.io/..."). We must NOT prepend
+ * basePath to absolute URLs — only to relative paths starting with "/".
+ */
+function resolveVideoSrc(src: string): string {
+  if (src.startsWith("http://") || src.startsWith("https://")) {
+    return src;
+  }
+  return `${BASE_PATH}${src}`;
+}
+
 interface VideoClipProps {
   /** Path to the WebM file (relative to public/, e.g. "/uploads/moves/foo.webm") */
   src: string;
@@ -77,7 +90,7 @@ export function VideoClip({ src, className }: VideoClipProps) {
       onError={() => setHasError(true)}
       className={cn("rounded-lg border border-border bg-black", className)}
     >
-      <source src={`${BASE_PATH}${src}`} type="video/webm" />
+      <source src={resolveVideoSrc(src)} type="video/webm" />
     </video>
   );
 }

@@ -1,0 +1,13 @@
+{
+  "siteName": "WWM Boss Guide",
+  "siteDescription": "The definitive moveset encyclopedia for Where Winds Meet — parry and dodge every boss attack.",
+  "logo": "",
+  "defaultHeroImage": "",
+  "socialLinks": [
+    {
+      "platform": "GitHub",
+      "url": "https://github.com"
+    }
+  ],
+  "footer": null
+}

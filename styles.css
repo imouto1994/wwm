@@ -1,0 +1,142 @@
+@import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+@plugin "@tailwindcss/typography";
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --highlight-text-dark: #000000;
+  --highlight-text-light: #ffffff;
+  --radius: 0.625rem;
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.508 0.118 165.612);
+  --primary-foreground: oklch(0.979 0.021 166.113);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.596 0.145 163.225);
+  --sidebar-primary-foreground: oklch(0.979 0.021 166.113);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+}
+
+/*
+ * WWM Wuxia Dark Theme
+ *
+ * Ink-wash palette with gold accents, designed to match the game's
+ * martial arts aesthetic. See docs/SPEC.md Section 4.2.
+ *
+ * Since <html className="dark"> is always set, these values are the
+ * only active theme. The :root light values above are kept as a
+ * fallback but never displayed.
+ */
+.dark {
+  --background: #0f0f0f;
+  --foreground: #e8e6e3;
+  --card: #1a1a2e;
+  --card-foreground: #e8e6e3;
+  --popover: #1a1a2e;
+  --popover-foreground: #e8e6e3;
+  --primary: #c9a84c;           /* wuxia gold — headings, CTAs, key highlights */
+  --primary-foreground: #0f0f0f;
+  --secondary: #242442;
+  --secondary-foreground: #e8e6e3;
+  --muted: #1a1a2e;
+  --muted-foreground: #9b9b9b;
+  --accent: #c9a84c;            /* wuxia gold */
+  --accent-foreground: #0f0f0f;
+  --destructive: #c94c4c;       /* difficulty "Very Hard", warnings */
+  --border: #2a2a3e;
+  --input: #2a2a3e;
+  --ring: #c9a84c;              /* focus rings use gold for visibility */
+  --chart-1: #c9a84c;
+  --chart-2: #4c8fc9;
+  --chart-3: #4cc9a8;
+  --chart-4: #c94c8f;
+  --chart-5: #8f4cc9;
+  --sidebar: #1a1a2e;
+  --sidebar-foreground: #e8e6e3;
+  --sidebar-primary: #c9a84c;
+  --sidebar-primary-foreground: #0f0f0f;
+  --sidebar-accent: #242442;
+  --sidebar-accent-foreground: #e8e6e3;
+  --sidebar-border: #2a2a3e;
+  --sidebar-ring: #c9a84c;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

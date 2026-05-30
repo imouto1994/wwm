@@ -1,0 +1,73 @@
+# GitHub Actions workflow to build and deploy the static site to GitHub Pages.
+#
+# Triggered on push to main or manually via workflow_dispatch.
+# Uses the modern actions/deploy-pages approach — no gh-pages branch needed,
+# deploys directly from the build artifact.
+#
+# The build:gh-pages script sets NEXT_PUBLIC_BASE_PATH=/wwm, which:
+# 1. Configures next.config.ts basePath for prefixed routing
+# 2. Prefixes <video> src paths in video-clip.tsx
+#
+# TinaCMS builds with --content=local (reads content from the repo filesystem,
+# no Tina Cloud credentials needed for static export).
+#
+# Prerequisites:
+# - Enable GitHub Pages in repo Settings → Pages → Source: GitHub Actions
+# - Ensure .nvmrc specifies the correct Node.js version
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Prevent concurrent deployments to avoid partial state
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static site
+        run: pnpm build:gh-pages
+
+      - name: Upload build artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -571,7 +571,7 @@ tags: ["wuxia-swordsman", "multi-phase", "fast-combos"]
 | **Hosting** | GitHub Pages (static export at `https://imouto1994.github.io/wwm/`) |
 | **Build** | `pnpm build:gh-pages` — TinaCMS local content build + Next.js static export (`output: 'export'`) |
 | **CI/CD** | Push to `main` → GitHub Actions workflow builds and deploys to Pages automatically |
-| **CMS editing** | Local only via `pnpm dev` → `/admin`. The deployed site's admin UI is view-only (no Tina Cloud backend). Content changes are committed to Git and trigger a rebuild. |
+| **CMS editing** | Tina Cloud — editors can log in at `/admin/index.html` on the deployed site to edit content visually. Edits are committed to Git via Tina Cloud and trigger a rebuild. Local editing also works via `pnpm dev` → `/admin`. |
 
 ### 10.1 Static Export Configuration
 
@@ -609,9 +609,9 @@ GitHub Pages serves the site at `https://imouto1994.github.io/wwm/`, requiring a
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NEXT_PUBLIC_BASE_PATH` | Build only | Set by `build:gh-pages` to `/wwm`. Controls basePath in `next.config.ts` and video src prefixing. |
-| `NEXT_PUBLIC_TINA_CLIENT_ID` | Tina Cloud only | Not needed for static export with local content |
-| `TINA_TOKEN` | Tina Cloud only | Not needed for static export with local content |
-| `NEXT_PUBLIC_TINA_BRANCH` | Tina Cloud only | Not needed for static export with local content |
+| `NEXT_PUBLIC_TINA_CLIENT_ID` | Yes | Tina Cloud project client ID (from app.tina.io). Set in `.env` locally, GitHub Actions secret in CI. |
+| `TINA_TOKEN` | Yes | Tina Cloud read-only token (from app.tina.io). Set in `.env` locally, GitHub Actions secret in CI. |
+| `NEXT_PUBLIC_TINA_BRANCH` | Yes | Git branch for content (default: `main`). Set in `.env` locally, hardcoded in CI workflow. |
 
 ---
 
@@ -694,8 +694,7 @@ Key technical decisions made during the Phase 1 build:
 | **Dark-only theme** | `<html className="dark">` always set. `.dark` CSS variables hold the wuxia palette. `:root` light values kept as unused fallback. No theme toggle. |
 | **Hard-coded nav links** | "Bosses" and "About" are fixed routes. CMS-editable nav deferred to Phase 2. |
 | **GitHub Pages static export** | `output: 'export'` produces a static `out/` directory. `NEXT_PUBLIC_BASE_PATH=/wwm` is the single source of truth for basePath in both `next.config.ts` and `video-clip.tsx`. ISR/revalidation removed — all data baked in at build time. |
-| **`--content=local` is required for build** | `tinacms build --content=local` starts a local GraphQL data layer that reads content from the filesystem. Without it, the generated client tries to query Tina Cloud (401 with placeholder credentials). Placeholder env vars for `NEXT_PUBLIC_TINA_CLIENT_ID`, `TINA_TOKEN`, and `NEXT_PUBLIC_TINA_BRANCH` are still required because `tina/config.tsx` references them. |
-| **Admin is view-only on deployed site** | The deployed static site's admin UI loads but cannot save edits (no Tina Cloud backend). Content edits done locally via `pnpm dev` or by editing MDX files in Git. Push to `main` triggers rebuild. |
+| **Tina Cloud integrated** | Real Tina Cloud credentials are used in production. The build queries Tina Cloud for content, and the deployed admin UI at `/admin/index.html` supports live editing — edits are committed to Git via Tina Cloud, triggering a rebuild. Credentials stored in `.env` locally and GitHub Actions secrets in CI. |
 
 ---
 

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tinacms dev -c \"next dev --turbopack --port 2110\"",
     "build": "tinacms build && next build",
-    "build:gh-pages": "NEXT_PUBLIC_BASE_PATH=/wwm NEXT_PUBLIC_TINA_CLIENT_ID=placeholder TINA_TOKEN=placeholder NEXT_PUBLIC_TINA_BRANCH=main tinacms build --content=local --skip-cloud-checks -c \"next build\"",
+    "build:gh-pages": "NEXT_PUBLIC_BASE_PATH=/wwm tinacms build --skip-cloud-checks -c \"next build\"",
     "lint": "biome lint"
   },
   "devDependencies": {

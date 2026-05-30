@@ -8,11 +8,14 @@
 # 1. Configures next.config.ts basePath for prefixed routing
 # 2. Prefixes <video> src paths in video-clip.tsx
 #
-# TinaCMS builds with --content=local (reads content from the repo filesystem,
-# no Tina Cloud credentials needed for static export).
+# Tina Cloud credentials are passed via GitHub Actions secrets so the
+# TinaCMS client can query content at build time.
 #
 # Prerequisites:
 # - Enable GitHub Pages in repo Settings → Pages → Source: GitHub Actions
+# - Add these secrets in repo Settings → Secrets and variables → Actions:
+#     NEXT_PUBLIC_TINA_CLIENT_ID  (from app.tina.io)
+#     TINA_TOKEN                  (from app.tina.io)
 # - Ensure .nvmrc specifies the correct Node.js version
 
 name: Deploy to GitHub Pages
@@ -35,6 +38,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_TINA_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_TINA_CLIENT_ID }}
+      TINA_TOKEN: ${{ secrets.TINA_TOKEN }}
+      NEXT_PUBLIC_TINA_BRANCH: main
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

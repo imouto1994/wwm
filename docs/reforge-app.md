@@ -107,6 +107,7 @@ A single screen (no routing). Top to bottom:
 ```
 Reforge Pity Tracker (/)
 ├── Header (title + tagline)
+├── SessionBar (active-session select · New · manage menu: rename / delete)
 ├── CurrentStateBar
 │   ├── totals (total rolls · stones spent · next roll cost)
 │   ├── per-node chips (pity · tier · lock toggle · "about to pop" pulse)
@@ -115,13 +116,13 @@ Reforge Pity Tracker (/)
 └── MilestoneTable (rows = milestones, columns = the 5 nodes + roll/stone totals)
 ```
 
-Lock/unlock is done by clicking a node chip's lock toggle, which appends a lock milestone. The current state is simply the last row of the table.
+Everything below the SessionBar reflects the **active** session; switching sessions swaps the whole view (current state, forms, table). Lock/unlock is done by clicking a node chip's lock toggle, which appends a lock milestone to the active session. The current state is simply the last row of the table.
 
 ---
 
 ## 4. Data Model
 
-The session is stored as an ordered list of milestone **inputs**; the table is *derived* by replaying them (nothing computed is persisted). Defined in [apps/reforge/src/types/reforge.ts](../apps/reforge/src/types/reforge.ts):
+Each session is an ordered list of milestone **inputs**; its table is *derived* by replaying them (nothing computed is persisted). The app holds many named sessions and remembers which one is active. Defined in [apps/reforge/src/types/reforge.ts](../apps/reforge/src/types/reforge.ts):
 
 ```typescript
 type NodeId = 1 | 2 | 3 | 4 | 5;
@@ -157,7 +158,12 @@ interface Milestone {
   goldPity?: Partial<Record<NodeId, number>>; // pity-at-gold per node golded here
 }
 
-interface PersistedState { version: 2; inputs: MilestoneInput[] }
+// A named session is just its ordered inputs; its table is derived on demand.
+interface Session { id: string; name: string; inputs: MilestoneInput[] }
+
+// v3 holds many named sessions plus the active one's id. (v2 was a single
+// `inputs` array, migrated into one Session on load - see storage.ts#coerceState.)
+interface PersistedState { version: 3; sessions: Session[]; activeSessionId: string }
 ```
 
 `goldPity` records how many rolls each node took to gold in that milestone (its pity just before the reset). The snapshot pity is 0 afterward, so `goldPity` is what drives the gold-luck cell color.
@@ -223,7 +229,8 @@ Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled a
 
 ### 6.1 Components ([apps/reforge/src/components](../apps/reforge/src/components))
 
-- **CurrentStateBar** — session totals, next-roll cost, a per-node chip row (pity, tier, inline lock toggle, the about-to-pop pulse), and the action buttons (Record rolls / gold, Revert, Reset).
+- **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels) and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default.
+- **CurrentStateBar** — session totals, next-roll cost, a per-node chip row (pity, tier, inline lock toggle, the about-to-pop pulse), and the action buttons (Record rolls / gold, Revert, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete).
 - **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. Edit/Delete appear on the latest row only (Edit hidden for lock rows). Horizontally scrollable with a sticky `#` column on mobile.
 - **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable, unlocked node enabled by the **end** of the entered batch — so nodes that unlock within those rolls appear too. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
 - **RevertMilestoneForm** — per enabled node a gold + lock toggle (no variant); all pity resets to 0.
@@ -239,7 +246,7 @@ Dark wuxia ink-wash palette reused from the Boss Guide ([apps/reforge/src/index.
 
 ### 6.4 State
 
-State flows through `useReforgeSession` ([apps/reforge/src/hooks/useReforgeSession.ts](../apps/reforge/src/hooks/useReforgeSession.ts)) — a `useReducer` holding the milestone inputs, deriving the table via `replay` in a `useMemo`, and persisting the inputs to `localStorage`. Only the **latest** milestone can be edited or deleted; every mutation is a list change followed by a re-replay.
+State flows through `useReforgeSession` ([apps/reforge/src/hooks/useReforgeSession.ts](../apps/reforge/src/hooks/useReforgeSession.ts)) — a `useReducer` holding `{ sessions, activeSessionId }`. Milestone actions mutate the **active** session's inputs (leaving the other sessions' array identities untouched, so only the active table re-derives); session actions add/switch/rename/delete. The active session's table is derived via `replay` in a `useMemo`, and the whole list is persisted to `localStorage`. Within a session, only the **latest** milestone can be edited or deleted; every mutation is a list change followed by a re-replay.
 
 ---
 
@@ -277,16 +284,26 @@ apps/reforge/
     ├── types/reforge.ts
     ├── lib/
     │   ├── constants.ts
+    │   ├── id.ts           # shared uid() (crypto.randomUUID) for session/milestone ids
     │   ├── engine.ts       # pure logic (replay, pity accrual, cost, Node 5 auto-gold, revert, luck)
     │   ├── engine.test.ts  # Vitest unit tests
-    │   └── storage.ts      # localStorage load/save (v2) with fallback
-    ├── hooks/useReforgeSession.ts
-    └── components/{CurrentStateBar,MilestoneTable,RollMilestoneForm,RevertMilestoneForm}.tsx
+    │   ├── storage.ts      # localStorage load/save (v3) + pure coerceState migration
+    │   └── storage.test.ts # Vitest tests for coerceState (migration, repair, fallbacks)
+    ├── hooks/
+    │   ├── useReforgeSession.ts
+    │   └── useReforgeSession.test.ts  # tests the pure nextSessionName helper
+    └── components/{SessionBar,CurrentStateBar,MilestoneTable,RollMilestoneForm,RevertMilestoneForm}.tsx
 ```
 
 ### 7.3 Persistence
 
-A single key `wwm-reforge` holds `{ version: 2, inputs }` — only the milestone inputs, since the table is derived. `loadState`/`saveState` probe `localStorage` and fall back to an in-memory store when it is unavailable (e.g. private mode). On load, any payload whose `version` is not 2 (including the old per-roll v1 schema) or that is malformed resets to an empty session.
+A single key `wwm-reforge` holds `{ version: 3, sessions, activeSessionId }` — only each session's milestone inputs, since the tables are derived. `loadState`/`saveState` probe `localStorage` and fall back to an in-memory store when it is unavailable (e.g. private mode). On load, the pure `coerceState` validates the payload and:
+
+- **migrates** the older single-session v2 shape (`{ version: 2, inputs }`) into one named `Session`, preserving an in-progress session (including legacy object-shaped `goldHits`);
+- **repairs** a v3 payload (generates missing ids, defaults blank names, de-dupes ids, drops non-object entries, falls back to the first session when `activeSessionId` is dangling);
+- **resets** anything else (v1, an empty `sessions` array, unknown/missing version, or malformed JSON) to a single fresh default session.
+
+This guarantees there is always at least one session with a resolvable `activeSessionId`. Note two accepted trade-offs: an older v2 build that later reads a v3 payload will reset (forward-incompatible, same as any version mismatch); and because each tab persists the whole list, two tabs editing **different** sessions can overwrite each other (last write wins) — a known limitation for this version.
 
 ---
 
@@ -319,7 +336,8 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 - [x] Milestone UI: CurrentStateBar, MilestoneTable, Roll/Revert forms; lock-via-chip
 - [x] Cell highlighting: gold-luck colors + latest-row about-to-pop pulse
 - [x] Edit / delete the latest milestone (re-replay)
-- [x] Vitest engine unit tests
+- [x] Multiple named sessions (create / switch / rename / delete) via SessionBar, with v2 -> v3 migration
+- [x] Vitest engine unit tests (plus `coerceState` migration and `nextSessionName` tests)
 - [x] Vercel config; boss-guide GitHub Pages workflow updated for the monorepo
 
 ### Phase 2 — Polish
@@ -333,7 +351,7 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 
 - [ ] Edit / delete any milestone (not just the latest)
 - [ ] Pity-over-time visualization
-- [ ] Multiple weapon-skin sessions
+- [ ] Reorder / duplicate sessions; per-session export / import
 
 ---
 

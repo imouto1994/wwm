@@ -10,7 +10,7 @@ Guidelines for working on the **Reforge Pity Tracker** (`apps/reforge`), one of 
 
 ## The one mental model that matters
 
-The single source of truth is an ordered `MilestoneInput[]`. The entire per-node table is **derived** by `replay(inputs)` in [src/lib/engine.ts](src/lib/engine.ts). Only the inputs are persisted; never store computed state (pity, stones, snapshots).
+The single source of truth is an ordered `MilestoneInput[]` **per session**. The entire per-node table is **derived** by `replay(inputs)` in [src/lib/engine.ts](src/lib/engine.ts). Only the inputs are persisted (the app keeps many named sessions plus the active id - see `storage.ts`); never store computed state (pity, stones, snapshots).
 
 ```
 MilestoneInput[]  --replay()-->  Milestone[] (snapshots + running totals)  -->  table
@@ -20,12 +20,13 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 
 ## Architecture
 
-- `src/types/reforge.ts` - domain types. `goldHits` is `NodeId[]` (no variant).
+- `src/types/reforge.ts` - domain types. `goldHits` is `NodeId[]` (no variant); `Session` wraps a named `MilestoneInput[]`; `PersistedState` is v3 (`sessions` + `activeSessionId`).
 - `src/lib/constants.ts` - all game numbers. Change tuning here, never inline.
-- `src/lib/engine.ts` - **pure, framework-free** logic. Put business logic here, not in components.
-- `src/lib/storage.ts` - localStorage load/save, version-gated, with in-memory fallback.
-- `src/hooks/useReforgeSession.ts` - `useReducer` over inputs; derives `replay` via `useMemo`; persists.
-- `src/components/` - `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`.
+- `src/lib/id.ts` - shared `uid()` (`crypto.randomUUID`) for session/milestone ids; used by storage and the hook.
+- `src/lib/engine.ts` - **pure, framework-free** logic. Put business logic here, not in components. (Session-agnostic: it replays one `MilestoneInput[]` and is unaffected by multi-session.)
+- `src/lib/storage.ts` - localStorage load/save, version-gated (v3), with in-memory fallback. Pure exported `coerceState` migrates v2 and repairs/validates v3.
+- `src/hooks/useReforgeSession.ts` - `useReducer` over `{ sessions, activeSessionId }`; milestone actions target the active session, session actions create/switch/rename/delete; derives `replay` via `useMemo`; persists.
+- `src/components/` - `SessionBar`, `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`.
 
 ## Invariants that are easy to get wrong
 
@@ -44,7 +45,7 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 2. Add/extend Vitest tests in `src/lib/engine.test.ts` (this repo expects tests for logic you write). Cover boundaries (unlock crossings, locks, gold/re-roll, revert, Node 5).
 3. Keep detailed top-level and inline comments explaining the *why* (a repo-wide rule).
 4. **Update [docs/reforge-app.md](../../docs/reforge-app.md)** whenever behavior, data model, or UI changes.
-5. If you change the persisted schema, bump/guard `version` in `storage.ts` and add a migration (see `normalizeInputs`) so existing sessions are not silently corrupted.
+5. If you change the persisted schema, bump/guard `version` in `storage.ts` and add a migration in the pure `coerceState` (see the v2->v3 path and `normalizeInputs`) so existing sessions are not silently corrupted. Keep `coerceState` pure and covered by `storage.test.ts`.
 
 ## Commands (run from repo root)
 

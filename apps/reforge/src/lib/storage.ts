@@ -1,19 +1,29 @@
 /**
- * localStorage persistence for the session.
+ * localStorage persistence for sessions.
  *
- * Only the milestone *inputs* are stored (the table is derived via replay). The
- * payload is gated by a `version` field; anything that does not match the
- * current version - including the previous per-roll v1 schema - is treated as
- * empty so we never feed a stale shape into the engine.
+ * Only the milestone *inputs* of each session are stored (every table is derived
+ * via replay). The payload is gated by a `version` field and run through
+ * `coerceState`, which migrates the older single-session v2 shape and repairs or
+ * discards anything malformed, so the engine is never fed a stale/invalid shape.
  */
-import type { PersistedState } from '@/types/reforge';
+import { uid } from '@/lib/id';
+import type { MilestoneInput, PersistedState, Session } from '@/types/reforge';
 
-// New key for the v2 schema; the old `wwm-reforge:v1` payload is simply ignored.
+// Shared key across schema versions; the payload's `version` disambiguates.
 const STORAGE_KEY = 'wwm-reforge';
-const VERSION = 2 as const;
+const VERSION = 3 as const;
 
+const DEFAULT_SESSION_NAME = 'Session 1';
+
+function makeSession(name: string, inputs: MilestoneInput[] = []): Session {
+  return { id: uid(), name, inputs };
+}
+
+// A valid-but-empty state always has exactly one session, so the app never has
+// to handle a "no active session" case.
 function emptyState(): PersistedState {
-  return { version: VERSION, inputs: [] };
+  const session = makeSession(DEFAULT_SESSION_NAME);
+  return { version: VERSION, sessions: [session], activeSessionId: session.id };
 }
 
 // In-memory fallback used when localStorage is unavailable (e.g. private mode).
@@ -22,7 +32,7 @@ let memoryFallback: PersistedState | null = null;
 // Earlier builds stored roll `goldHits` as objects ({ id, variant }); the variant
 // has since been dropped, so coerce any legacy entries to plain node ids. This
 // preserves an in-progress session across that schema change without a version bump.
-function normalizeInputs(inputs: unknown): PersistedState['inputs'] {
+function normalizeInputs(inputs: unknown): MilestoneInput[] {
   if (!Array.isArray(inputs)) return [];
   return inputs.map((input) => {
     if (input?.type === 'roll' && Array.isArray(input.goldHits)) {
@@ -33,6 +43,62 @@ function normalizeInputs(inputs: unknown): PersistedState['inputs'] {
     }
     return input;
   });
+}
+
+// Coerce one untrusted entry into a valid Session, repairing a missing id/name
+// and normalizing its inputs. Returns null if it is not an object at all.
+function coerceSession(raw: unknown, index: number): Session | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as { id?: unknown; name?: unknown; inputs?: unknown };
+  const id = typeof r.id === 'string' && r.id ? r.id : uid();
+  const name = typeof r.name === 'string' && r.name.trim() ? r.name : `Session ${index + 1}`;
+  return { id, name, inputs: normalizeInputs(r.inputs) };
+}
+
+// A loosely-typed view of a possibly-legacy parsed payload so we can probe
+// fields (v2 `inputs`, v3 `sessions`) without fighting the typed shape.
+interface RawState {
+  version?: unknown;
+  inputs?: unknown;
+  sessions?: unknown;
+  activeSessionId?: unknown;
+}
+
+/**
+ * Turn an untrusted, possibly-legacy parsed payload into a valid v3 state.
+ *
+ * Pure (no `window`) so it is unit-testable. Guarantees at least one session and
+ * an `activeSessionId` that resolves to a real session. Exported for tests.
+ */
+export function coerceState(parsed: unknown): PersistedState {
+  if (typeof parsed !== 'object' || parsed === null) return emptyState();
+  const raw = parsed as RawState;
+
+  // v2 -> v3: wrap the single inputs array into one named session.
+  if (raw.version === 2) {
+    const session = makeSession(DEFAULT_SESSION_NAME, normalizeInputs(raw.inputs));
+    return { version: VERSION, sessions: [session], activeSessionId: session.id };
+  }
+
+  if (raw.version === VERSION) {
+    if (!Array.isArray(raw.sessions)) return emptyState();
+    const sessions = raw.sessions.map((s, i) => coerceSession(s, i)).filter((s): s is Session => s !== null);
+    if (sessions.length === 0) return emptyState();
+
+    // Defensive: ensure ids are unique so a switch/update targets exactly one
+    // session (duplicate ids would otherwise update or match several).
+    const seen = new Set<string>();
+    for (const s of sessions) {
+      if (seen.has(s.id)) s.id = uid();
+      seen.add(s.id);
+    }
+
+    const active = typeof raw.activeSessionId === 'string' && sessions.some((s) => s.id === raw.activeSessionId) ? raw.activeSessionId : sessions[0].id;
+    return { version: VERSION, sessions, activeSessionId: active };
+  }
+
+  // v1, missing/unknown version, or any other shape: start fresh.
+  return emptyState();
 }
 
 function storageAvailable(): boolean {
@@ -48,15 +114,13 @@ function storageAvailable(): boolean {
 
 export function loadState(): PersistedState {
   if (!storageAvailable()) {
+    // The fallback already holds a valid v3 object, so no coercion is needed.
     return memoryFallback ?? emptyState();
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyState();
-    const parsed = JSON.parse(raw) as PersistedState;
-    // Reset on a version mismatch or a malformed payload.
-    if (parsed.version !== VERSION || !Array.isArray(parsed.inputs)) return emptyState();
-    return { version: VERSION, inputs: normalizeInputs(parsed.inputs) };
+    return coerceState(JSON.parse(raw));
   } catch {
     return emptyState();
   }

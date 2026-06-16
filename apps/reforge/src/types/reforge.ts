@@ -79,8 +79,26 @@ export interface Milestone {
   goldPity?: Partial<Record<NodeId, number>>;
 }
 
-/** Shape persisted to localStorage. Gated by `version` for safe migrations. */
-export interface PersistedState {
-  version: 2;
+/**
+ * A single tracked reforge session: a user-given name plus its ordered
+ * milestone inputs. As with the whole app, only the inputs are persisted; the
+ * per-node table for a session is derived by replaying `inputs`.
+ */
+export interface Session {
+  id: string;
+  name: string;
   inputs: MilestoneInput[];
+}
+
+/**
+ * Shape persisted to localStorage. Gated by `version` for safe migrations.
+ *
+ * v3 holds many named sessions plus the id of the active one. The earlier v2
+ * shape (`{ version: 2, inputs }`) is a single unnamed session and is migrated
+ * into one `Session` on load (see `storage.ts#coerceState`).
+ */
+export interface PersistedState {
+  version: 3;
+  sessions: Session[];
+  activeSessionId: string;
 }

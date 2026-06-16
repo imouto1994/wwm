@@ -2,6 +2,7 @@ import { CurrentStateBar } from '@/components/CurrentStateBar';
 import { MilestoneTable } from '@/components/MilestoneTable';
 import { RevertMilestoneForm } from '@/components/RevertMilestoneForm';
 import { RollMilestoneForm } from '@/components/RollMilestoneForm';
+import { SessionBar } from '@/components/SessionBar';
 import { useReforgeSession } from '@/hooks/useReforgeSession';
 import { createInitialNodes } from '@/lib/engine';
 /**
@@ -39,10 +40,27 @@ export default function App() {
   }
 
   function handleReset() {
-    if (window.confirm('Clear the whole session and start over?')) {
+    if (window.confirm("Clear this session's milestones and start over? Other sessions are kept.")) {
       setForm(null);
       session.reset();
     }
+  }
+
+  // Switching, creating, or deleting a session changes the state a form operates
+  // against, so close any open form first to avoid applying it to the wrong session.
+  function handleSwitchSession(id: string) {
+    setForm(null);
+    session.switchSession(id);
+  }
+
+  function handleCreateSession() {
+    setForm(null);
+    session.createSession();
+  }
+
+  function handleDeleteSession(id: string) {
+    setForm(null);
+    session.deleteSession(id);
   }
 
   const rollInitial =
@@ -60,6 +78,15 @@ export default function App() {
           Where Winds Meet &mdash; log a milestone whenever a node turns gold; the table tracks pity, locks, and stones across all five nodes.
         </p>
       </header>
+
+      <SessionBar
+        sessions={session.sessions}
+        activeSessionId={session.activeSessionId}
+        onSwitch={handleSwitchSession}
+        onCreate={handleCreateSession}
+        onRename={session.renameSession}
+        onDelete={handleDeleteSession}
+      />
 
       <CurrentStateBar
         totalRolls={session.totalRolls}

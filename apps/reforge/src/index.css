@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/*
+ * WWM Reforge Tracker - wuxia dark theme.
+ * Ink-wash palette with gold accents, matching the Boss Guide
+ * (see apps/boss-guide/styles.css and docs/SPEC.md section 4.2).
+ */
+@theme {
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a2e;
+  --color-surface-hover: #242442;
+  --color-fg: #e8e6e3;
+  --color-muted: #9b9b9b;
+  --color-gold: #c9a84c;
+  --color-red: #c94c4c;
+  --color-border: #2a2a3e;
+
+  /* Node tier colors */
+  --color-tier-gold: #c9a84c;
+  --color-tier-purple: #8f4cc9;
+  --color-tier-blue: #4c8fc9;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+  }
+}
+
+/*
+ * "Soon to pop" pulse: applied to a node cell on the current row when its pity
+ * has reached the soft-pity floor and it has not yet turned gold. The glow uses
+ * the wuxia gold (#c9a84c -> rgb(201, 168, 76)).
+ */
+@keyframes wwm-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.55);
+  }
+}
+
+.animate-soon {
+  animation: wwm-pulse-glow 1.4s ease-in-out infinite;
+}
+
+/* Respect reduced-motion: keep a static ring instead of pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-soon {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.6);
+  }
+}

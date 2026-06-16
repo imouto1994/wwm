@@ -1,12 +1,17 @@
-# GitHub Actions workflow to build and deploy the static site to GitHub Pages.
+# GitHub Actions workflow to build and deploy the Boss Guide to GitHub Pages.
+#
+# Only the boss guide (apps/boss-guide) ships to GitHub Pages. The reforge
+# app (apps/reforge) deploys separately via Vercel's Git integration.
 #
 # Triggered on push to main or manually via workflow_dispatch.
 # Uses the modern actions/deploy-pages approach — no gh-pages branch needed,
 # deploys directly from the build artifact.
 #
-# The build:gh-pages script sets NEXT_PUBLIC_BASE_PATH=/wwm, which:
-# 1. Configures next.config.ts basePath for prefixed routing
-# 2. Prefixes <video> src paths in video-clip.tsx
+# `pnpm build:boss` runs the boss guide's build:gh-pages script, which sets
+# NEXT_PUBLIC_BASE_PATH=/wwm to:
+# 1. Configure next.config.ts basePath for prefixed routing
+# 2. Prefix <video> src paths in video-clip.tsx
+# It outputs the static site to apps/boss-guide/out.
 #
 # Tina Cloud credentials are passed via GitHub Actions secrets so the
 # TinaCMS client can query content at build time.
@@ -23,6 +28,14 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Only redeploy the boss guide when it or shared workspace config changes.
+    # Reforge-only changes (apps/reforge) deploy via Vercel instead.
+    paths:
+      - 'apps/boss-guide/**'
+      - '.github/workflows/deploy.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   workflow_dispatch:
 
 permissions:
@@ -61,12 +74,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build static site
-        run: pnpm build:gh-pages
+        run: pnpm build:boss
 
       - name: Upload build artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: out
+          path: apps/boss-guide/out
 
   deploy:
     needs: build

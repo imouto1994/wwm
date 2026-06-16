@@ -47,10 +47,6 @@ We will go through all common target looks and our proposed strategy for that ta
 
 #### Target Look 1: All nodes in the target set (Cost: $$$$$)
 
-Assuming our target set is set A:
-
-1. Keep
-
 #### Target Look 2: Color node + 2 nodes in the target set (Cost: $$$$)
 
 #### Target Look 3: Color node + 1 node in the target set (Cost: $$$)
@@ -58,5 +54,3 @@ Assuming our target set is set A:
 #### Target Look 4: Color node in a target color not one of the 2 sets (Cost: $$ - $$$$$?)
 
 #### Target Look 5: All gold nodes (Cost: $)
-
-## Pity Tracker App

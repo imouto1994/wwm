@@ -231,7 +231,7 @@ Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled a
 ### 6.2 Cell highlighting (milestone table)
 
 - **Gold-luck color** — on the row where a node turned gold, the cell background is colored by `goldPity` (rolls it took): green `< 30`, yellow `30-49`, red `>= 50`. The number is shown (`★ N`) so color is not the only signal.
-- **About-to-pop pulse** — on the **latest row only**, an enabled, unlocked, non-gold node with `pity >= 30` gets a pulsing gold glow (`.animate-soon` in [index.css](../apps/reforge/src/index.css)); it honors `prefers-reduced-motion` with a static ring. The same pulse is mirrored on the current-state chips.
+- **About-to-pop pulse** — on the **latest row only**, an enabled, unlocked, non-gold node with `pity >= 30` gets a rotating, breathing rainbow gradient ring (`.animate-soon` in [index.css](../apps/reforge/src/index.css)); it honors `prefers-reduced-motion` with a static rainbow ring. The same pulse is mirrored on the current-state chips.
 
 ### 6.3 Theme
 

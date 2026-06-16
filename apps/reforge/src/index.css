@@ -38,28 +38,75 @@
 }
 
 /*
- * "Soon to pop" pulse: applied to a node cell on the current row when its pity
- * has reached the soft-pity floor and it has not yet turned gold. The glow uses
- * the wuxia gold (#c9a84c -> rgb(201, 168, 76)).
+ * "Soon to pop" rainbow ring: applied to a node chip/cell when its pity has
+ * reached the soft-pity floor and it has not yet turned gold. It is a rotating
+ * multi-color gradient border that also "breathes".
+ *
+ * A box-shadow can only be one solid color, so the ring lives on a masked
+ * ::before instead: a conic-gradient fills the pseudo-element and a two-layer
+ * mask punches out the center, leaving only the 2px border band painted. A
+ * gradient's angle is not animatable on its own, so we drive it through a
+ * registered custom property (@property) and animate that. The `0deg` var
+ * fallback keeps a static rainbow on engines without @property support (e.g.
+ * Firefox ESR < 128) rather than voiding the whole `background` declaration.
  */
-@keyframes wwm-pulse-glow {
+@property --wwm-rainbow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes wwm-rainbow-spin {
+  to {
+    --wwm-rainbow-angle: 360deg;
+  }
+}
+
+/* Breathe via opacity (not ring thickness) so it stays cheap to paint and the
+ * rainbow never fully disappears at the trough. */
+@keyframes wwm-rainbow-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0);
+    opacity: 0.55;
   }
   50% {
-    box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.55);
+    opacity: 1;
   }
 }
 
 .animate-soon {
-  animation: wwm-pulse-glow 1.4s ease-in-out infinite;
+  position: relative;
 }
 
-/* Respect reduced-motion: keep a static ring instead of pulsing. */
+.animate-soon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--wwm-rainbow-angle, 0deg),
+    #ff0040,
+    #ff8000,
+    #ffe000,
+    #2ecc40,
+    #00b3ff,
+    #6a00ff,
+    #ff00c8,
+    #ff0040
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: wwm-rainbow-spin 3s linear infinite, wwm-rainbow-breathe 1.4s ease-in-out infinite;
+}
+
+/* Respect reduced-motion: hold a static rainbow ring (colors only, no motion). */
 @media (prefers-reduced-motion: reduce) {
-  .animate-soon {
+  .animate-soon::before {
     animation: none;
-    box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.6);
+    opacity: 1;
   }
 }

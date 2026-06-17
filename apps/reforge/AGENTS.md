@@ -25,7 +25,8 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 - `src/lib/id.ts` - shared `uid()` (`crypto.randomUUID`) for session/milestone ids; used by storage and the hook.
 - `src/lib/engine.ts` - **pure, framework-free** logic. Put business logic here, not in components. (Session-agnostic: it replays one `MilestoneInput[]` and is unaffected by multi-session.)
 - `src/lib/storage.ts` - localStorage load/save, version-gated (v3), with in-memory fallback. Pure exported `coerceState` migrates v2 and repairs/validates v3.
-- `src/hooks/useReforgeSession.ts` - `useReducer` over `{ sessions, activeSessionId }`; milestone actions target the active session, session actions create/switch/rename/delete; derives `replay` via `useMemo`; persists.
+- `src/lib/sessionIo.ts` - **pure** session JSON export/import: `serializeSession`, `parseSessionExport` (validates the file envelope), and strict `sanitizeMilestoneInputs`. The DOM glue (download/file-read) lives in `SessionBar`, not here.
+- `src/hooks/useReforgeSession.ts` - `useReducer` over `{ sessions, activeSessionId }`; milestone actions target the active session, session actions create/switch/rename/delete/import; derives `replay` via `useMemo`; persists.
 - `src/components/` - `SessionBar`, `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`.
 
 ## Invariants that are easy to get wrong

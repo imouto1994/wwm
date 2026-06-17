@@ -1,12 +1,27 @@
-import type { Session } from '@/types/reforge';
+import { exportFileName, parseSessionExport, serializeSession } from '@/lib/sessionIo';
+import type { MilestoneInput, Session } from '@/types/reforge';
 /**
  * Session switcher + manager. A compact header row with a native `<select>` to
- * switch the active session, a "New" button, and a kebab menu to rename (inline)
- * or delete the active session. Native controls keep it accessible and mobile
- * friendly; the menu closes on outside-click / Escape.
+ * switch the active session, a "New" button, and a kebab menu to rename (inline),
+ * export, import, or delete the active session. Native controls keep it
+ * accessible and mobile friendly; the menu closes on outside-click / Escape.
  */
-import { Check, ChevronDown, FolderOpen, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Download, FolderOpen, MoreVertical, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+
+// Trigger a client-side download of `contents` as a file. The anchor is added to
+// the DOM before clicking (some browsers require it) and cleaned up after.
+function downloadJson(filename: string, contents: string) {
+  const blob = new Blob([contents], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 interface Props {
   sessions: Session[];
@@ -15,18 +30,20 @@ interface Props {
   onCreate: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onImport: (name: string, inputs: MilestoneInput[]) => void;
 }
 
 // Soft cap so a long name cannot break the layout; rename trims before saving.
 const MAX_NAME_LENGTH = 40;
 
-export function SessionBar({ sessions, activeSessionId, onSwitch, onCreate, onRename, onDelete }: Props) {
+export function SessionBar({ sessions, activeSessionId, onSwitch, onCreate, onRename, onDelete, onImport }: Props) {
   const active = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close the manage menu on an outside click or Escape; restore focus to the
   // trigger so keyboard users are not stranded.
@@ -68,8 +85,32 @@ export function SessionBar({ sessions, activeSessionId, onSwitch, onCreate, onRe
     }
   }
 
+  function handleExport() {
+    setMenuOpen(false);
+    downloadJson(exportFileName(active.name), serializeSession(active));
+  }
+
+  // Read the chosen file, validate/sanitize it, and import as a new session.
+  // Capture the element before awaiting and clear it in `finally` so picking the
+  // same file again still fires a change event.
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const result = parseSessionExport(await file.text());
+      if (result.ok) onImport(result.name, result.inputs);
+      else window.alert(result.error);
+    } finally {
+      input.value = '';
+    }
+  }
+
   return (
     <section className='relative z-20 flex items-center gap-2 rounded-xl border border-border bg-surface p-3'>
+      {/* Persistent hidden input so the ref stays valid after the menu closes. */}
+      <input ref={fileInputRef} type='file' accept='application/json,.json' onChange={handleFile} className='hidden' aria-hidden='true' tabIndex={-1} />
+
       <FolderOpen size={16} className='shrink-0 text-gold' />
 
       {renaming ? (
@@ -164,8 +205,27 @@ export function SessionBar({ sessions, activeSessionId, onSwitch, onCreate, onRe
                 <button
                   type='button'
                   role='menuitem'
+                  onClick={handleExport}
+                  className='flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-hover'
+                >
+                  <Download size={14} /> Export
+                </button>
+                <button
+                  type='button'
+                  role='menuitem'
+                  onClick={() => {
+                    setMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className='flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-hover'
+                >
+                  <Upload size={14} /> Import
+                </button>
+                <button
+                  type='button'
+                  role='menuitem'
                   onClick={handleDelete}
-                  className='flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red transition-colors hover:bg-red/10'
+                  className='flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-sm text-red transition-colors hover:bg-red/10'
                 >
                   <Trash2 size={14} /> Delete
                 </button>

@@ -102,3 +102,19 @@ export interface PersistedState {
   sessions: Session[];
   activeSessionId: string;
 }
+
+/**
+ * JSON envelope for a single exported/imported session (one file = one session).
+ *
+ * `exportVersion` is the file-format version, intentionally separate from
+ * `PersistedState.version` so the on-disk and on-file schemas can evolve apart.
+ * The session `id` is intentionally omitted - a fresh one is minted on import so
+ * an imported session never collides with an existing one. See `lib/sessionIo.ts`.
+ */
+export interface SessionExport {
+  type: 'wwm-reforge-session';
+  exportVersion: 1;
+  exportedAt: string; // ISO timestamp, informational only
+  name: string;
+  inputs: MilestoneInput[];
+}

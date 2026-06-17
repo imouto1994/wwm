@@ -27,6 +27,7 @@ type Action =
   | { type: 'deleteLatest' }
   | { type: 'reset' }
   | { type: 'createSession'; name?: string }
+  | { type: 'importSession'; name: string; inputs: MilestoneInput[] }
   | { type: 'switchSession'; id: string }
   | { type: 'renameSession'; id: string; name: string }
   | { type: 'deleteSession'; id: string };
@@ -75,6 +76,11 @@ function reducer(state: State, action: Action): State {
       return updateActiveInputs(state, () => []);
     case 'createSession': {
       const session: Session = { id: uid(), name: action.name?.trim() || nextSessionName(state.sessions), inputs: [] };
+      return { sessions: [...state.sessions, session], activeSessionId: session.id };
+    }
+    case 'importSession': {
+      // Inputs are already sanitized by sessionIo; mint a fresh id and switch to it.
+      const session: Session = { id: uid(), name: action.name.trim() || nextSessionName(state.sessions), inputs: action.inputs };
       return { sessions: [...state.sessions, session], activeSessionId: session.id };
     }
     case 'switchSession':
@@ -144,6 +150,7 @@ export function useReforgeSession() {
     deleteLatest: useCallback(() => dispatch({ type: 'deleteLatest' }), []),
     reset: useCallback(() => dispatch({ type: 'reset' }), []),
     createSession: useCallback((name?: string) => dispatch({ type: 'createSession', name }), []),
+    importSession: useCallback((name: string, inputs: MilestoneInput[]) => dispatch({ type: 'importSession', name, inputs }), []),
     switchSession: useCallback((id: string) => dispatch({ type: 'switchSession', id }), []),
     renameSession: useCallback((id: string, name: string) => dispatch({ type: 'renameSession', id, name }), []),
     deleteSession: useCallback((id: string) => dispatch({ type: 'deleteSession', id }), []),

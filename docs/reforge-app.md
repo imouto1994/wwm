@@ -164,6 +164,11 @@ interface Session { id: string; name: string; inputs: MilestoneInput[] }
 // v3 holds many named sessions plus the active one's id. (v2 was a single
 // `inputs` array, migrated into one Session on load - see storage.ts#coerceState.)
 interface PersistedState { version: 3; sessions: Session[]; activeSessionId: string }
+
+// JSON envelope for a single exported/imported session (one file = one session).
+// `exportVersion` is the file-format version, separate from PersistedState.version;
+// the session id is omitted and minted fresh on import. See lib/sessionIo.ts.
+interface SessionExport { type: 'wwm-reforge-session'; exportVersion: 1; exportedAt: string; name: string; inputs: MilestoneInput[] }
 ```
 
 `goldPity` records how many rolls each node took to gold in that milestone (its pity just before the reset). The snapshot pity is 0 afterward, so `goldPity` is what drives the gold-luck cell color.
@@ -229,7 +234,7 @@ Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled a
 
 ### 6.1 Components ([apps/reforge/src/components](../apps/reforge/src/components))
 
-- **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels) and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default.
+- **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels), **Export** (downloads the active session as JSON), **Import** (reads a JSON file and adds it as a new session), and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default. Export/import logic lives in the pure [sessionIo.ts](../apps/reforge/src/lib/sessionIo.ts) (validates the file envelope and strictly sanitizes inputs); the DOM glue (download/file-read) is the only non-pure part.
 - **CurrentStateBar** — session totals, next-roll cost, a per-node chip row (pity, tier, inline lock toggle, the about-to-pop pulse), and the action buttons (Record rolls / gold, Revert, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete).
 - **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. Edit/Delete appear on the latest row only (Edit hidden for lock rows). Horizontally scrollable with a sticky `#` column on mobile.
 - **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable, unlocked node enabled by the **end** of the entered batch — so nodes that unlock within those rolls appear too. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
@@ -288,7 +293,9 @@ apps/reforge/
     │   ├── engine.ts       # pure logic (replay, pity accrual, cost, Node 5 auto-gold, revert, luck)
     │   ├── engine.test.ts  # Vitest unit tests
     │   ├── storage.ts      # localStorage load/save (v3) + pure coerceState migration
-    │   └── storage.test.ts # Vitest tests for coerceState (migration, repair, fallbacks)
+    │   ├── storage.test.ts # Vitest tests for coerceState (migration, repair, fallbacks)
+    │   ├── sessionIo.ts    # pure session JSON export/import (serialize, sanitize, parse)
+    │   └── sessionIo.test.ts # Vitest tests for serialize/parse/sanitize
     ├── hooks/
     │   ├── useReforgeSession.ts
     │   └── useReforgeSession.test.ts  # tests the pure nextSessionName helper
@@ -343,7 +350,7 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 ### Phase 2 — Polish
 
 - [ ] Record cosmetic blue/purple tiers for the "current look" display
-- [ ] Export / import the milestone log as JSON (backup, move devices)
+- [x] Export / import a session as JSON (backup, move devices) — per-session via SessionBar
 - [ ] Settings panel to tweak soft-pity / unlock / cost constants per skin
 - [ ] Optional "possible missed gold" hint when a node's pity passes hard pity (90)
 

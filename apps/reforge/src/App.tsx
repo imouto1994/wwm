@@ -5,6 +5,7 @@ import { RollMilestoneForm } from '@/components/RollMilestoneForm';
 import { SessionBar } from '@/components/SessionBar';
 import { useReforgeSession } from '@/hooks/useReforgeSession';
 import { createInitialNodes } from '@/lib/engine';
+import type { MilestoneInput } from '@/types/reforge';
 /**
  * Reforge Pity Tracker - milestone log.
  *
@@ -63,6 +64,11 @@ export default function App() {
     session.deleteSession(id);
   }
 
+  function handleImportSession(name: string, inputs: MilestoneInput[]) {
+    setForm(null);
+    session.importSession(name, inputs);
+  }
+
   const rollInitial =
     form?.kind === 'roll' && form.edit && latest?.input.type === 'roll' ? { rolls: latest.input.rolls, goldHits: latest.input.goldHits } : undefined;
 
@@ -86,6 +92,7 @@ export default function App() {
         onCreate={handleCreateSession}
         onRename={session.renameSession}
         onDelete={handleDeleteSession}
+        onImport={handleImportSession}
       />
 
       <CurrentStateBar

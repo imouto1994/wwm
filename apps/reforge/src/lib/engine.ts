@@ -68,8 +68,10 @@ export function lockableNodes(nodes: NodeSnapshot[]): NodeSnapshot[] {
 
 // Maps a pity-at-gold value to a luck color for the cell background.
 export function goldPityColor(pity: number): 'green' | 'yellow' | 'red' {
-  if (pity < GOLD_LUCK.green) return 'green';
-  if (pity < GOLD_LUCK.yellow) return 'yellow';
+  // Inclusive upper bounds (<= 30 green, <= 50 yellow, > 50 red) so the bands
+  // line up with the size-5 GoldStats buckets that break at 30 and 50.
+  if (pity <= GOLD_LUCK.green) return 'green';
+  if (pity <= GOLD_LUCK.yellow) return 'yellow';
   return 'red';
 }
 

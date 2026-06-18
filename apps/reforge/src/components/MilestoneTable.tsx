@@ -5,7 +5,7 @@ import type { Milestone, NodeId, NodeSnapshot } from '@/types/reforge';
  * The milestone log rendered as a table: one row per milestone (plus a Start
  * baseline), one column per node. Two cell cues:
  *  - Gold-luck background on the row where a node turned gold, colored by how
- *    many rolls it took (green < 30, yellow < 50, red >= 50). The number is
+ *    many rolls it took (green <= 30, yellow 31-50, red > 50). The number is
  *    shown too so color is not the only signal.
  *  - A pulsing glow on the latest row for nodes that are about to pop.
  * Edit/Delete are offered on the latest row only (Edit hidden for lock rows).

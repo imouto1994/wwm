@@ -45,8 +45,9 @@ export const SOFT_PITY = { min: 30, max: 40 };
 export const HARD_PITY = 90;
 
 // Gold-luck cell coloring by how many rolls a node took to turn gold (its
-// pity-at-gold): below `green` is lucky, below `yellow` is average, at/above
-// `yellow` is unlucky.
+// pity-at-gold). Bounds are inclusive: at/below `green` is lucky, at/below
+// `yellow` is average, above `yellow` is unlucky. 30/50 line up with the
+// size-5 GoldStats bucket edges.
 export const GOLD_LUCK = { green: 30, yellow: 50 };
 
 // A node is flagged "about to pop" once its pity reaches this (soft-pity floor).

@@ -225,7 +225,7 @@ Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled an
 
 ### 5.6 Luck color and "about to pop"
 
-`goldPityColor(pity)` → `green` (`< 30`) / `yellow` (`< 50`) / `red` (`>= 50`). `isSoon(node)` → true for an enabled, unlocked, non-gold node whose `pity >= 30`.
+`goldPityColor(pity)` → `green` (`<= 30`) / `yellow` (`<= 50`) / `red` (`> 50`) — inclusive bounds that line up with the size-5 GoldStats buckets. `isSoon(node)` → true for an enabled, unlocked, non-gold node whose `pity >= 30`.
 
 ### 5.7 Gold-luck distribution
 
@@ -252,7 +252,7 @@ Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled an
 
 ### 6.2 Cell highlighting (milestone table)
 
-- **Gold-luck color** — on the row where a node turned gold, the cell background is colored by `goldPity` (rolls it took): green `< 30`, yellow `30-49`, red `>= 50`. The number is shown next to a star icon so color is not the only signal.
+- **Gold-luck color** — on the row where a node turned gold, the cell background is colored by `goldPity` (rolls it took): green `<= 30`, yellow `31-50`, red `> 50`. The number is shown next to a star icon so color is not the only signal.
 - **About-to-pop pulse** — on the **latest row only**, an enabled, unlocked, non-gold node with `pity >= 30` gets a rotating, breathing rainbow gradient ring (`.animate-soon` in [index.css](../apps/reforge/src/index.css)); it honors `prefers-reduced-motion` with a static rainbow ring. The same pulse is mirrored on the current-state chips.
 - These cues are keyed in the **Legend** rail (left) rather than a caption under the table; the **GoldStats** rail (right) summarizes the gold-luck distribution across the whole session.
 

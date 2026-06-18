@@ -26,9 +26,9 @@ export function Legend() {
 
       <div className='flex flex-col gap-2'>
         <div className='text-[10px] uppercase tracking-wide text-muted'>Rolls it took to gold</div>
-        <LuckRow swatch={LUCK_BG.green} label={`Lucky (< ${GOLD_LUCK.green})`} />
-        <LuckRow swatch={LUCK_BG.yellow} label={`Average (${GOLD_LUCK.green}\u2013${GOLD_LUCK.yellow - 1})`} />
-        <LuckRow swatch={LUCK_BG.red} label={`Unlucky (\u2265 ${GOLD_LUCK.yellow})`} />
+        <LuckRow swatch={LUCK_BG.green} label={`Lucky (\u2264 ${GOLD_LUCK.green})`} />
+        <LuckRow swatch={LUCK_BG.yellow} label={`Average (${GOLD_LUCK.green + 1}\u2013${GOLD_LUCK.yellow})`} />
+        <LuckRow swatch={LUCK_BG.red} label={`Unlucky (> ${GOLD_LUCK.yellow})`} />
       </div>
 
       <div className='flex items-center gap-2'>

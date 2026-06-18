@@ -146,11 +146,12 @@ describe('rollableAfter', () => {
 });
 
 describe('goldPityColor', () => {
-  it('maps pity-at-gold to luck colors at the 30/50 thresholds', () => {
-    expect(goldPityColor(29)).toBe('green');
-    expect(goldPityColor(30)).toBe('yellow');
-    expect(goldPityColor(49)).toBe('yellow');
-    expect(goldPityColor(50)).toBe('red');
+  it('maps pity-at-gold to luck colors at the inclusive 30/50 thresholds', () => {
+    expect(goldPityColor(1)).toBe('green');
+    expect(goldPityColor(30)).toBe('green');
+    expect(goldPityColor(31)).toBe('yellow');
+    expect(goldPityColor(50)).toBe('yellow');
+    expect(goldPityColor(51)).toBe('red');
     expect(goldPityColor(90)).toBe('red');
   });
 });

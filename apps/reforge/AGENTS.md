@@ -27,14 +27,14 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 - `src/lib/storage.ts` - localStorage load/save, version-gated (v3), with in-memory fallback. Pure exported `coerceState` migrates v2 and repairs/validates v3.
 - `src/lib/sessionIo.ts` - **pure** session JSON export/import: `serializeSession`, `parseSessionExport` (validates the file envelope), and strict `sanitizeMilestoneInputs`. The DOM glue (download/file-read) lives in `SessionBar`, not here.
 - `src/hooks/useReforgeSession.ts` - `useReducer` over `{ sessions, activeSessionId }`; milestone actions target the active session, session actions create/switch/rename/delete/import; derives `replay` via `useMemo`; persists.
-- `src/components/` - `SessionBar`, `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`.
+- `src/components/` - `SessionBar`, `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`, plus the two rails: `Legend` (static key for the table cues) and `GoldStats` (gold-luck pity distribution; renders the pure `goldPityDistribution`). `App` lays these out as three columns (legend left, tracker center, stats right) that stack on mobile.
 
 ## Invariants that are easy to get wrong
 
-- **Unlock off-by-one**: a node enabled at threshold `T` first accrues pity at roll `T+1`. Use the `Math.max(prevCum, T)` clamp in the accrual formula; do not "fix" it.
+- **Unlock pity**: the roll that crosses a node's unlock threshold `T` counts as its first pity, so a freshly unlocked node reads pity 1 (not 0). Use the `Math.max(prevCum, T - 1)` clamp in the accrual formula (once `prevCum >= T` the `T - 1` term is a no-op, so it only adds that single unlock roll; Node 1 at `T = 0` is unaffected).
 - **Locks are their own milestones**, so lock config is constant within a roll segment - that is why cost (`rolls * cost(lockedCount)`) and pity accrual are simple. Keep lock changes as separate milestones.
 - **Re-rolling an UNLOCKED gold clears its gold** (gambled away); a **LOCKED** gold is frozen and keeps its star. See the `accruing > 0` branch in `applyRoll`.
-- **Node 5** is auto-gold once `cum >= 100`: never rolled, never locked, not counted in cost, no pity. Always special-case it.
+- **Node 5** is auto-gold once `cum >= 99`: never rolled, never locked, not counted in cost, no pity. Always special-case it (it never appears in `goldPity`, so it is naturally excluded from the gold-luck stats).
 - **`goldPity`** records pity-at-gold per node for the gold-luck cell color, because the snapshot pity is 0 after a gold. Keep it derived in replay.
 - **Revert** zeroes all pity but keeps `enabled` (permanent unlocks), `cumulativeRolls`, and `cumulativeStones` (no stone refund).
 - **Only the latest milestone** can be edited or deleted.
@@ -63,4 +63,4 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 
 ## Deployment
 
-This app deploys to **Vercel** (Root Directory `apps/reforge`, Vite preset, output `dist/`), with `base: '/'`. The Node version comes from the **root** `package.json` `engines.node` (`.nvmrc` is ignored by Vercel). The boss guide - not this app - is the one on GitHub Pages; do not couple the two.
+This app deploys to **Vercel** (Root Directory `apps/reforge`, Vite preset, output `dist/`), with `base: '/'`. The Node version comes from the **root** `package.json` `engines.node` (currently `24.x`; mirrored in `apps/reforge/package.json`; `.nvmrc` is ignored by Vercel). The boss guide - not this app - is the one on GitHub Pages; do not couple the two.

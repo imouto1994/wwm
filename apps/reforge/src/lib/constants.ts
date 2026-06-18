@@ -1,4 +1,4 @@
-import type { NodeId } from "@/types/reforge";
+import type { NodeId } from '@/types/reforge';
 
 export const NODE_IDS: NodeId[] = [1, 2, 3, 4, 5];
 
@@ -7,19 +7,19 @@ export const AUTO_GOLD_NODE: NodeId = 5;
 export const ROLLABLE_NODE_IDS: NodeId[] = [1, 2, 3, 4];
 
 export const NODE_LABELS: Record<NodeId, string> = {
-  1: "Color",
-  2: "Part 1",
-  3: "Part 2",
-  4: "Part 3",
-  5: "Highlight",
+  1: 'Color',
+  2: 'Part 1',
+  3: 'Part 2',
+  4: 'Part 3',
+  5: 'Misc',
 };
 
 export const NODE_DESCRIPTIONS: Record<NodeId, string> = {
-  1: "Weapon color",
-  2: "1st part of the weapon",
-  3: "2nd part of the weapon",
-  4: "3rd part of the weapon",
-  5: "Auto-gold once unlocked; follows the other nodes",
+  1: 'Weapon color',
+  2: '1st part of the weapon',
+  3: '2nd part of the weapon',
+  4: '3rd part of the weapon',
+  5: 'Auto-gold once unlocked; follows the other nodes',
 };
 
 // Total rolls required before each node is enabled.
@@ -28,7 +28,7 @@ export const UNLOCK_ROLLS: Record<NodeId, number> = {
   2: 24,
   3: 40,
   4: 70,
-  5: 100,
+  5: 99,
 };
 
 // Stone cost per roll, keyed by number of locked rollable nodes.
@@ -51,3 +51,8 @@ export const GOLD_LUCK = { green: 30, yellow: 50 };
 
 // A node is flagged "about to pop" once its pity reaches this (soft-pity floor).
 export const SOON_PITY = SOFT_PITY.min;
+
+// Width of each pity range in the gold-luck distribution stats. Gold hits are
+// pooled into fixed buckets (1-5, 6-10, ... up to HARD_PITY) so players can see
+// where their golds tend to land relative to the soft-pity window.
+export const GOLD_BUCKET_SIZE = 5;

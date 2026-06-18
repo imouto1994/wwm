@@ -61,7 +61,7 @@ export function RollMilestoneForm({ nodes, baseRolls, initial, onSubmit, onCance
         handleSubmit();
       }}
     >
-      <h2 className='font-semibold text-gold'>{initial ? 'Edit roll milestone' : 'Record rolls'}</h2>
+      <h2 className='font-semibold text-gold'>{initial ? 'Edit roll milestone' : 'Add rolls'}</h2>
 
       <label className='flex flex-col gap-1 text-sm'>
         <span className='text-muted'>Rolls since last milestone</span>
@@ -118,7 +118,7 @@ export function RollMilestoneForm({ nodes, baseRolls, initial, onSubmit, onCance
           type='submit'
           className='inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2 font-semibold text-bg transition-opacity hover:opacity-90'
         >
-          <Dices size={16} /> {initial ? 'Save' : 'Add milestone'}
+          <Dices size={16} /> {initial ? 'Save' : 'Submit'}
         </button>
         <button type='button' onClick={onCancel} className='rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-surface-hover'>
           Cancel

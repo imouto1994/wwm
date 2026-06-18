@@ -1,4 +1,4 @@
-import { createInitialNodes, currentNodes, goldPityColor, isSoon, replay, rollableAfter } from '@/lib/engine';
+import { createInitialNodes, currentNodes, goldPityColor, goldPityDistribution, isSoon, replay, rollableAfter } from '@/lib/engine';
 import type { Milestone, MilestoneInput, NodeId, NodeSnapshot, RevertNodeInput } from '@/types/reforge';
 import { describe, expect, it } from 'vitest';
 
@@ -42,34 +42,34 @@ describe('replay - rolls, pity and gold', () => {
   });
 });
 
-describe('unlock boundary (first pity one roll after unlock)', () => {
-  it('enables Node 2 at exactly 24 rolls but gives it 0 pity that segment', () => {
+describe('unlock boundary (unlock roll counts as the first pity)', () => {
+  it('enables Node 2 at exactly 24 rolls and gives it pity 1 (the unlock roll)', () => {
     const m = last(replay([roll(24)]));
     expect(nodeOf(m.nodes, 2).enabled).toBe(true);
-    expect(nodeOf(m.nodes, 2).pity).toBe(0);
+    expect(nodeOf(m.nodes, 2).pity).toBe(1);
   });
 
-  it('accrues Node 2 pity only for rolls after it unlocked', () => {
-    // 24 to unlock, then 10 more: Node 2 should have 10, Node 1 should have 34.
+  it('keeps accruing after the unlock roll', () => {
+    // 24 to unlock (pity 1), then 10 more: Node 2 -> 11, Node 1 -> 34.
     const m = last(replay([roll(24), roll(10)]));
-    expect(nodeOf(m.nodes, 2).pity).toBe(10);
+    expect(nodeOf(m.nodes, 2).pity).toBe(11);
     expect(nodeOf(m.nodes, 1).pity).toBe(34);
   });
 
   it('handles an unlock that happens mid-segment', () => {
-    // One batch of 30 crosses Node 2's threshold (24): it gets 30 - 24 = 6.
+    // One batch of 30 crosses Node 2's threshold (24): rolls 24..30 -> pity 7.
     const m = last(replay([roll(30)]));
     expect(nodeOf(m.nodes, 2).enabled).toBe(true);
-    expect(nodeOf(m.nodes, 2).pity).toBe(6);
+    expect(nodeOf(m.nodes, 2).pity).toBe(7);
     expect(nodeOf(m.nodes, 1).pity).toBe(30);
   });
 
   it('lets a node that unlocks mid-batch be recorded as a gold hit', () => {
-    // 30 rolls unlocks Node 2 (at 24) and it golds: pity-at-gold = 30 - 24 = 6.
+    // 30 rolls unlocks Node 2 (at 24) and it golds: pity-at-gold = rolls 24..30 = 7.
     const m = last(replay([roll(30, [2])]));
     expect(nodeOf(m.nodes, 2).tier).toBe('gold');
     expect(nodeOf(m.nodes, 2).pity).toBe(0);
-    expect(m.goldPity?.[2]).toBe(6);
+    expect(m.goldPity?.[2]).toBe(7);
   });
 });
 
@@ -119,12 +119,12 @@ describe('revert', () => {
 });
 
 describe('Node 5 auto-gold', () => {
-  it('is not enabled before 100 cumulative rolls', () => {
-    expect(nodeOf(last(replay([roll(99)])).nodes, 5).enabled).toBe(false);
+  it('is not enabled before 99 cumulative rolls', () => {
+    expect(nodeOf(last(replay([roll(98)])).nodes, 5).enabled).toBe(false);
   });
 
-  it('auto-golds at 100 with no pity', () => {
-    const n5 = nodeOf(last(replay([roll(100)])).nodes, 5);
+  it('auto-golds at 99 with no pity', () => {
+    const n5 = nodeOf(last(replay([roll(99)])).nodes, 5);
     expect(n5.enabled).toBe(true);
     expect(n5.tier).toBe('gold');
     expect(n5.pity).toBe(0);
@@ -152,6 +152,44 @@ describe('goldPityColor', () => {
     expect(goldPityColor(49)).toBe('yellow');
     expect(goldPityColor(50)).toBe('red');
     expect(goldPityColor(90)).toBe('red');
+  });
+});
+
+describe('goldPityDistribution', () => {
+  it('returns 18 zeroed size-5 buckets (1..90) and total 0 for no golds', () => {
+    const empty = goldPityDistribution([]);
+    expect(empty.total).toBe(0);
+    expect(empty.buckets).toHaveLength(18);
+    expect(empty.buckets[0]).toMatchObject({ min: 1, max: 5 });
+    expect(empty.buckets[17]).toMatchObject({ min: 86, max: 90 });
+    expect(goldPityDistribution(replay([roll(10)])).total).toBe(0); // rolls, no golds
+  });
+
+  it('buckets a gold by its pity-at-gold, with 5 and 6 on either side of a boundary', () => {
+    const atFive = goldPityDistribution(replay([roll(5, [1])]));
+    expect(atFive.total).toBe(1);
+    expect(atFive.buckets[0]).toMatchObject({ min: 1, max: 5, count: 1 });
+
+    const atSix = goldPityDistribution(replay([roll(6, [1])]));
+    expect(atSix.buckets[0].count).toBe(0);
+    expect(atSix.buckets[1]).toMatchObject({ min: 6, max: 10, count: 1 });
+  });
+
+  it('sums multiple golds that fall in the same range', () => {
+    // Node 1 golds at pity 3, then is re-rolled and golds again at pity 4 - both in 1-5.
+    const dist = goldPityDistribution(replay([roll(3, [1]), roll(4, [1])]));
+    expect(dist.total).toBe(2);
+    expect(dist.buckets[0].count).toBe(2);
+  });
+
+  it('pools golds across nodes and ignores Node 5 (auto-gold, no pity)', () => {
+    // One batch of 30 golds Node 1 (pity 30 -> 26-30 bucket) and Node 2 (pity 7 -> 6-10).
+    const dist = goldPityDistribution(replay([roll(30, [1, 2])]));
+    expect(dist.total).toBe(2);
+    expect(dist.buckets[1]).toMatchObject({ min: 6, max: 10, count: 1 });
+    expect(dist.buckets[5]).toMatchObject({ min: 26, max: 30, count: 1 });
+    // Node 5 auto-golds at 99 but contributes nothing to the distribution.
+    expect(goldPityDistribution(replay([roll(99)])).total).toBe(0);
   });
 });
 

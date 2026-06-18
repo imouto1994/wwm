@@ -10,7 +10,7 @@ import type { Milestone, NodeId, NodeSnapshot } from '@/types/reforge';
  *  - A pulsing glow on the latest row for nodes that are about to pop.
  * Edit/Delete are offered on the latest row only (Edit hidden for lock rows).
  */
-import { Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Circle, Lock, Pencil, Sparkles, Star, Trash2 } from 'lucide-react';
 
 interface Props {
   milestones: Milestone[];
@@ -18,9 +18,11 @@ interface Props {
   onDeleteLatest: () => void;
 }
 
-const SHORT_LABELS: Record<NodeId, string> = { 1: 'Color', 2: 'Part 1', 3: 'Part 2', 4: 'Part 3', 5: 'Highlight' };
+const SHORT_LABELS: Record<NodeId, string> = { 1: 'Color', 2: 'Part 1', 3: 'Part 2', 4: 'Part 3', 5: 'Misc' };
 
-const LUCK_BG: Record<'green' | 'yellow' | 'red', string> = {
+// Shared by the table cells, the Legend, and the GoldStats bars so the luck
+// colors stay in lockstep.
+export const LUCK_BG: Record<'green' | 'yellow' | 'red', string> = {
   green: 'bg-green-600/30 text-green-200',
   yellow: 'bg-yellow-500/25 text-yellow-100',
   red: 'bg-red-600/30 text-red-200',
@@ -47,7 +49,10 @@ function NodeCell({ rowNodes, nodeId, goldPity, isLatest }: { rowNodes: NodeSnap
   if (goldPity != null) {
     return (
       <td className='px-1 py-1 text-center'>
-        <span className={`inline-block rounded px-2 py-0.5 font-semibold tabular-nums ${LUCK_BG[goldPityColor(goldPity)]}`}>★ {goldPity}</span>
+        <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-semibold tabular-nums ${LUCK_BG[goldPityColor(goldPity)]}`}>
+          <Star size={12} fill='currentColor' aria-hidden />
+          <span>{goldPity}</span>
+        </span>
       </td>
     );
   }
@@ -59,12 +64,41 @@ function NodeCell({ rowNodes, nodeId, goldPity, isLatest }: { rowNodes: NodeSnap
   return (
     <td className='px-2 py-1.5 text-center'>
       <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums ${soon ? 'animate-soon' : ''}`}>
-        <span className={tierClass}>{node.tier === 'gold' ? '★' : '•'}</span>
+        <span className={tierClass}>
+          {node.tier === 'gold' ? <Star size={12} fill='currentColor' aria-hidden /> : <Circle size={8} fill='currentColor' aria-hidden />}
+        </span>
         <span className='text-muted'>{node.pity}</span>
-        {node.locked && <span title='locked'>🔒</span>}
+        {node.locked && (
+          <span title='locked' className='inline-flex text-gold'>
+            <Lock size={11} aria-label='locked' />
+          </span>
+        )}
       </span>
     </td>
   );
+}
+
+// A roll that landed golds shows each node name followed by a gold star (e.g.
+// "Color *, Part 1 *") instead of the longer "-> Gold" text. Other milestone
+// types (plain rolls, lock, revert) fall back to the engine's label string.
+function MilestoneLabel({ m }: { m: Milestone }) {
+  if (m.input.type === 'roll' && m.input.goldHits.length > 0) {
+    // Each "name + star" is its own items-center group so the star is vertically
+    // centered with the text (vertical-align on an inline SVG sits slightly low).
+    // Spacing is via margins so the comma hugs the previous star ("... *, ...").
+    return (
+      <span className='inline-flex flex-wrap items-center gap-y-0.5'>
+        {m.input.goldHits.map((id, i) => (
+          <span key={id} className='inline-flex items-center whitespace-nowrap'>
+            {i > 0 && <span className='mr-1'>,</span>}
+            {SHORT_LABELS[id]}
+            <Star size={12} fill='currentColor' className='ml-1 text-tier-gold' aria-label='gold' />
+          </span>
+        ))}
+      </span>
+    );
+  }
+  return <>{m.label}</>;
 }
 
 function MilestoneRow({
@@ -76,7 +110,9 @@ function MilestoneRow({
   return (
     <tr className={isLatest ? 'bg-surface-hover/40' : ''}>
       <td className='sticky left-0 z-10 bg-surface px-2 py-1.5 text-center text-muted tabular-nums'>{m.index}</td>
-      <td className='px-2 py-1.5 whitespace-nowrap'>{m.label}</td>
+      <td className='px-2 py-1.5 whitespace-nowrap'>
+        <MilestoneLabel m={m} />
+      </td>
       {NODE_IDS.map((id) => (
         <NodeCell key={id} rowNodes={m.nodes} nodeId={id} goldPity={m.goldPity?.[id]} isLatest={isLatest} />
       ))}
@@ -158,12 +194,7 @@ export function MilestoneTable({ milestones, onEditLatest, onDeleteLatest }: Pro
           </tbody>
         </table>
       </div>
-      {milestones.length === 0 && (
-        <p className='text-sm text-muted'>No milestones yet. Use "Record rolls / gold" each time a node turns gold so nothing is missed.</p>
-      )}
-      <p className='text-xs text-muted'>
-        Cell color = rolls it took to gold (green &lt; 30, yellow &lt; 50, red &ge; 50). A pulsing cell on the last row is near gold.
-      </p>
+      {milestones.length === 0 && <p className='text-sm text-muted'>No milestones yet. Use "Add Rolls" each time a node turns gold so nothing is missed.</p>}
     </section>
   );
 }

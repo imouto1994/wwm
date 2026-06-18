@@ -1,4 +1,6 @@
 import { CurrentStateBar } from '@/components/CurrentStateBar';
+import { GoldStats } from '@/components/GoldStats';
+import { Legend } from '@/components/Legend';
 import { MilestoneTable } from '@/components/MilestoneTable';
 import { RevertMilestoneForm } from '@/components/RevertMilestoneForm';
 import { RollMilestoneForm } from '@/components/RollMilestoneForm';
@@ -75,65 +77,77 @@ export default function App() {
   const revertInitial = form?.kind === 'revert' && form.edit && latest?.input.type === 'revert' ? latest.input.nodes : undefined;
 
   return (
-    <div className='mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8'>
-      <header className='flex flex-col gap-1'>
+    <div className='mx-auto flex max-w-[96rem] flex-col gap-6 px-4 py-8'>
+      <header>
         <h1 className='flex items-center gap-2 text-2xl font-bold text-gold'>
-          <Hammer size={24} /> Reforge Pity Tracker
+          <Hammer size={24} className='animate-hammer' /> Reforge Pity Tracker
         </h1>
-        <p className='text-sm text-muted'>
-          Where Winds Meet &mdash; log a milestone whenever a node turns gold; the table tracks pity, locks, and stones across all five nodes.
-        </p>
       </header>
 
-      <SessionBar
-        sessions={session.sessions}
-        activeSessionId={session.activeSessionId}
-        onSwitch={handleSwitchSession}
-        onCreate={handleCreateSession}
-        onRename={session.renameSession}
-        onDelete={handleDeleteSession}
-        onImport={handleImportSession}
-      />
+      <div className='flex flex-col gap-6 lg:flex-row'>
+        {/* Center: the live tracker. min-w-0 lets the table scroll inside the flex row. */}
+        <div className='flex min-w-0 flex-1 flex-col gap-6'>
+          <SessionBar
+            sessions={session.sessions}
+            activeSessionId={session.activeSessionId}
+            onSwitch={handleSwitchSession}
+            onCreate={handleCreateSession}
+            onRename={session.renameSession}
+            onDelete={handleDeleteSession}
+            onImport={handleImportSession}
+          />
 
-      <CurrentStateBar
-        totalRolls={session.totalRolls}
-        totalStones={session.totalStones}
-        nextCost={session.nextCost}
-        nodes={nodes}
-        onToggleLock={session.addLock}
-        onRecordRoll={() => setForm({ kind: 'roll', edit: false })}
-        onRevert={() => setForm({ kind: 'revert', edit: false })}
-        onReset={handleReset}
-      />
+          <CurrentStateBar
+            totalRolls={session.totalRolls}
+            totalStones={session.totalStones}
+            nextCost={session.nextCost}
+            nodes={nodes}
+            onToggleLock={session.addLock}
+            onRecordRoll={() => setForm({ kind: 'roll', edit: false })}
+            onRevert={() => setForm({ kind: 'revert', edit: false })}
+            onReset={handleReset}
+          />
 
-      {form?.kind === 'roll' && (
-        <RollMilestoneForm
-          nodes={formBaseNodes}
-          baseRolls={formBaseRolls}
-          initial={rollInitial}
-          onSubmit={(rolls, goldHits) => {
-            if (form.edit) session.editLatest({ id: '', type: 'roll', rolls, goldHits });
-            else session.addRoll(rolls, goldHits);
-            setForm(null);
-          }}
-          onCancel={() => setForm(null)}
-        />
-      )}
+          {form?.kind === 'roll' && (
+            <RollMilestoneForm
+              nodes={formBaseNodes}
+              baseRolls={formBaseRolls}
+              initial={rollInitial}
+              onSubmit={(rolls, goldHits) => {
+                if (form.edit) session.editLatest({ id: '', type: 'roll', rolls, goldHits });
+                else session.addRoll(rolls, goldHits);
+                setForm(null);
+              }}
+              onCancel={() => setForm(null)}
+            />
+          )}
 
-      {form?.kind === 'revert' && (
-        <RevertMilestoneForm
-          nodes={formBaseNodes}
-          initial={revertInitial}
-          onSubmit={(revertNodes) => {
-            if (form.edit) session.editLatest({ id: '', type: 'revert', nodes: revertNodes });
-            else session.addRevert(revertNodes);
-            setForm(null);
-          }}
-          onCancel={() => setForm(null)}
-        />
-      )}
+          {form?.kind === 'revert' && (
+            <RevertMilestoneForm
+              nodes={formBaseNodes}
+              initial={revertInitial}
+              onSubmit={(revertNodes) => {
+                if (form.edit) session.editLatest({ id: '', type: 'revert', nodes: revertNodes });
+                else session.addRevert(revertNodes);
+                setForm(null);
+              }}
+              onCancel={() => setForm(null)}
+            />
+          )}
 
-      <MilestoneTable milestones={milestones} onEditLatest={openEditLatest} onDeleteLatest={session.deleteLatest} />
+          <MilestoneTable milestones={milestones} onEditLatest={openEditLatest} onDeleteLatest={session.deleteLatest} />
+        </div>
+
+        {/* Left on desktop (order-first), below the tracker on mobile. self-start keeps it sticky-able. */}
+        <aside className='lg:order-first lg:sticky lg:top-8 lg:w-60 lg:shrink-0 lg:self-start'>
+          <Legend />
+        </aside>
+
+        {/* Right on desktop (order-last), bottom on mobile. */}
+        <aside className='lg:order-last lg:sticky lg:top-8 lg:w-64 lg:shrink-0 lg:self-start'>
+          <GoldStats milestones={milestones} />
+        </aside>
+      </div>
 
       <footer className='pt-2 text-center text-xs text-muted'>
         Saved locally in your browser. Unofficial fan tool, not affiliated with Everstone Studios.

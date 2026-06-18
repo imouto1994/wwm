@@ -54,9 +54,9 @@ export function RevertMilestoneForm({ nodes, initial, onSubmit, onCancel }: Prop
         handleSubmit();
       }}
     >
-      <h2 className='font-semibold text-gold'>{initial ? 'Edit revert milestone' : 'Revert to a saved look'}</h2>
+      <h2 className='font-semibold text-gold'>{initial ? 'Edit restore' : 'Restore a saved plan'}</h2>
       <p className='text-xs text-muted'>
-        Reverting resets every node's pity to 0. Set each node's gold/lock state for the look you rolled back to. Stones spent and total rolls are kept.
+        Restoring a plan resets every node's pity to 0. Set each node's gold/lock state for the look you rolled back to. Stones spent and total rolls are kept.
       </p>
 
       <div className='flex flex-col gap-2'>
@@ -94,7 +94,7 @@ export function RevertMilestoneForm({ nodes, initial, onSubmit, onCancel }: Prop
           type='submit'
           className='inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2 font-semibold text-bg transition-opacity hover:opacity-90'
         >
-          <RotateCcw size={16} /> {initial ? 'Save' : 'Add revert'}
+          <RotateCcw size={16} /> {initial ? 'Save' : 'Restore Plan'}
         </button>
         <button type='button' onClick={onCancel} className='rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-surface-hover'>
           Cancel

@@ -7,7 +7,18 @@
  * the subtle bits (pity accrual across unlock boundaries, stone cost, the
  * pity-at-gold used for cell coloring, clearing a re-rolled gold, revert).
  */
-import { AUTO_GOLD_NODE, GOLD_LUCK, NODE_IDS, NODE_LABELS, ROLLABLE_NODE_IDS, ROLL_COST_BY_LOCKED, SOON_PITY, UNLOCK_ROLLS } from '@/lib/constants';
+import {
+  AUTO_GOLD_NODE,
+  GOLD_BUCKET_SIZE,
+  GOLD_LUCK,
+  HARD_PITY,
+  NODE_IDS,
+  NODE_LABELS,
+  ROLLABLE_NODE_IDS,
+  ROLL_COST_BY_LOCKED,
+  SOON_PITY,
+  UNLOCK_ROLLS,
+} from '@/lib/constants';
 import type { Milestone, MilestoneInput, NodeId, NodeSnapshot } from '@/types/reforge';
 
 // Opening state of a fresh session: only Node 1 is enabled, nothing locked,
@@ -80,7 +91,7 @@ function labelFor(input: MilestoneInput): string {
     case 'lock':
       return `${input.locked ? 'Lock' : 'Unlock'} ${NODE_LABELS[input.nodeId]}`;
     case 'revert':
-      return 'Revert';
+      return 'Restore';
   }
 }
 
@@ -110,10 +121,14 @@ function applyRoll(prevNodes: NodeSnapshot[], prevCum: number, rolls: number, go
     }
 
     // Rolls during which this node was actually active: enabled going into the
-    // roll (the +1 offset: a node unlocked at threshold T first rolls at T+1, so
-    // we clamp the segment start to max(prevCum, T)) and not locked.
+    // roll and not locked. The roll that crosses a node's unlock threshold T
+    // counts as its first pity, so a freshly unlocked node reads pity 1 (not 0).
+    // We clamp the segment start to max(prevCum, T - 1): once a node is golding
+    // again later (prevCum >= T) the `T - 1` term is a no-op, so this only adds
+    // that single unlock roll. Node 1 (T = 0) is unaffected: `T - 1` is below
+    // any cumulative count, so it accrues one pity per roll from the first roll.
     const threshold = UNLOCK_ROLLS[node.id];
-    const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, threshold));
+    const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, threshold - 1));
     const reached = node.pity + accruing;
 
     if (golds.has(node.id)) {
@@ -218,4 +233,49 @@ export function replay(inputs: MilestoneInput[]): Milestone[] {
 // Convenience: the current node state for a session (last milestone or initial).
 export function currentNodes(milestones: Milestone[]): NodeSnapshot[] {
   return milestones.length > 0 ? milestones[milestones.length - 1].nodes : createInitialNodes();
+}
+
+// One fixed pity range in the gold-luck distribution (inclusive bounds).
+export interface PityBucket {
+  min: number;
+  max: number;
+  count: number;
+}
+
+/**
+ * Aggregate every recorded gold hit into fixed-width pity ranges, so the UI can
+ * show where a session's golds tend to land relative to the soft-pity window.
+ *
+ * We read each milestone's `goldPity` (the pity-at-gold captured when a node
+ * golded), pooling all rollable nodes together. Node 5 is auto-gold with no
+ * pity, so it never appears in `goldPity` and is naturally excluded. Because it
+ * is derived from `goldPity`, the distribution counts every gold *event* in the
+ * session (even ones later gambled away) and re-derives on edit/delete.
+ *
+ * Buckets are `size`-wide and span 1..HARD_PITY (e.g. 1-5, 6-10, ... 86-90); a
+ * gold at pity `p` lands in `floor((p - 1) / size)`. `p` is clamped to that
+ * range defensively, though in practice it is always 1..HARD_PITY.
+ */
+export function goldPityDistribution(milestones: Milestone[], size: number = GOLD_BUCKET_SIZE): { buckets: PityBucket[]; total: number } {
+  const bucketCount = Math.ceil(HARD_PITY / size);
+  const buckets: PityBucket[] = Array.from({ length: bucketCount }, (_, i) => ({
+    min: i * size + 1,
+    max: Math.min((i + 1) * size, HARD_PITY),
+    count: 0,
+  }));
+
+  let total = 0;
+  for (const m of milestones) {
+    if (!m.goldPity) continue;
+    for (const id of NODE_IDS) {
+      const pity = m.goldPity[id];
+      if (pity == null) continue;
+      const clamped = Math.min(Math.max(pity, 1), HARD_PITY);
+      const index = Math.min(Math.floor((clamped - 1) / size), bucketCount - 1);
+      buckets[index].count += 1;
+      total += 1;
+    }
+  }
+
+  return { buckets, total };
 }

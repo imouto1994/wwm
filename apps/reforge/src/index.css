@@ -84,17 +84,7 @@
   inset: 0;
   border-radius: inherit;
   padding: 2px;
-  background: conic-gradient(
-    from var(--wwm-rainbow-angle, 0deg),
-    #ff0040,
-    #ff8000,
-    #ffe000,
-    #2ecc40,
-    #00b3ff,
-    #6a00ff,
-    #ff00c8,
-    #ff0040
-  );
+  background: conic-gradient(from var(--wwm-rainbow-angle, 0deg), #ff0040, #ff8000, #ffe000, #2ecc40, #00b3ff, #6a00ff, #ff00c8, #ff0040);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -103,10 +93,39 @@
   animation: wwm-rainbow-spin 3s linear infinite, wwm-rainbow-breathe 1.4s ease-in-out infinite;
 }
 
-/* Respect reduced-motion: hold a static rainbow ring (colors only, no motion). */
+/*
+ * Header hammer: a looping back-and-forth swing so the title's hammer reads as
+ * tapping. Pivots at the handle end (bottom) so the head arcs down and back; a
+ * brief hold before each strike gives it a hammering rhythm rather than a even
+ * pendulum sway.
+ */
+@keyframes wwm-hammer-swing {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+  70% {
+    transform: rotate(45deg);
+  }
+  85% {
+    transform: rotate(-8deg);
+  }
+}
+
+.animate-hammer {
+  transform-origin: bottom center;
+  animation: wwm-hammer-swing 1.4s ease-in-out infinite;
+}
+
+/* Respect reduced-motion: hold a static rainbow ring and a still hammer. */
 @media (prefers-reduced-motion: reduce) {
   .animate-soon::before {
     animation: none;
     opacity: 1;
+  }
+
+  .animate-hammer {
+    animation: none;
   }
 }

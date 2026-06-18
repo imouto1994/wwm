@@ -42,7 +42,7 @@ A weapon skin has **5 nodes**:
 | 2 | Part 1 | 2 gold variances (Set A / Set B) + purple + blue |
 | 3 | Part 2 | 2 gold variances (Set A / Set B) + purple + blue |
 | 4 | Part 3 | 2 gold variances (Set A / Set B) + purple + blue |
-| 5 | Highlight | **Special** — see 2.5 |
+| 5 | Misc | **Special** — in-game "Highlight"; see 2.5 |
 
 ### 2.2 Tiers and Sets
 
@@ -69,9 +69,9 @@ Nodes unlock sequentially as total rolls accumulate. Pity is only tracked once a
 | 2 | 24 |
 | 3 | 40 |
 | 4 | 70 |
-| 5 | 100 |
+| 5 | 99 |
 
-### 2.5 Node 5 (Highlight) — special
+### 2.5 Node 5 (Misc) — special
 
 - No blue/purple tier. Once enabled, it is **permanently gold**.
 - Its gold value is **derived** in-game from the other nodes' set, not rolled. Since the tracker does not track sets, it simply shows Node 5 as **gold** once enabled.
@@ -106,17 +106,21 @@ A single screen (no routing). Top to bottom:
 
 ```
 Reforge Pity Tracker (/)
-├── Header (title + tagline)
-├── SessionBar (active-session select · New · manage menu: rename / delete)
-├── CurrentStateBar
-│   ├── totals (total rolls · stones spent · next roll cost)
-│   ├── per-node chips (pity · tier · lock toggle · "about to pop" pulse)
-│   └── actions (Record rolls / gold · Revert · Reset)
-├── Milestone form (inline; shown when adding or editing a roll/revert milestone)
-└── MilestoneTable (rows = milestones, columns = the 5 nodes + roll/stone totals)
+├── Header (title)
+└── Three-column layout (stacks on mobile; rails are sticky on desktop)
+    ├── Legend (left) — static key for the table's color / pulse / mark cues
+    ├── Tracker (center)
+    │   ├── SessionBar (active-session select · New · manage menu: rename / delete)
+    │   ├── CurrentStateBar
+    │   │   ├── totals (total rolls · stones spent · roll cost)
+    │   │   ├── per-node chips (pity · gold-tinted when gold · lock toggle · "about to pop" pulse)
+    │   │   └── actions (Add Rolls · Restore Plan · Reset)
+    │   ├── Milestone form (inline; shown when adding or editing a roll/revert milestone)
+    │   └── MilestoneTable (rows = milestones, columns = the 5 nodes + roll/stone totals)
+    └── GoldStats (right) — gold counts per pity range (size-5 buckets)
 ```
 
-Everything below the SessionBar reflects the **active** session; switching sessions swaps the whole view (current state, forms, table). Lock/unlock is done by clicking a node chip's lock toggle, which appends a lock milestone to the active session. The current state is simply the last row of the table.
+Everything in the tracker column reflects the **active** session; switching sessions swaps the whole view (current state, forms, table, and the gold-luck stats). Lock/unlock is done by clicking a node chip's lock toggle, which appends a lock milestone to the active session. The current state is simply the last row of the table.
 
 ---
 
@@ -173,7 +177,7 @@ interface SessionExport { type: 'wwm-reforge-session'; exportVersion: 1; exporte
 
 `goldPity` records how many rolls each node took to gold in that milestone (its pity just before the reset). The snapshot pity is 0 afterward, so `goldPity` is what drives the gold-luck cell color.
 
-Constants live in [apps/reforge/src/lib/constants.ts](../apps/reforge/src/lib/constants.ts): `UNLOCK_ROLLS`, `ROLL_COST_BY_LOCKED`, `SOFT_PITY`, `HARD_PITY`, `ROLLABLE_NODE_IDS`, `AUTO_GOLD_NODE`, `GOLD_LUCK` (30/50 color thresholds), and `SOON_PITY` (about-to-pop floor).
+Constants live in [apps/reforge/src/lib/constants.ts](../apps/reforge/src/lib/constants.ts): `UNLOCK_ROLLS`, `ROLL_COST_BY_LOCKED`, `SOFT_PITY`, `HARD_PITY`, `ROLLABLE_NODE_IDS`, `AUTO_GOLD_NODE`, `GOLD_LUCK` (30/50 color thresholds), `SOON_PITY` (about-to-pop floor), and `GOLD_BUCKET_SIZE` (pity-range width for the gold-luck stats).
 
 ---
 
@@ -197,12 +201,12 @@ flowchart TD
     v --> snap
 ```
 
-### 5.2 Pity accrual (handles unlock crossing + off-by-one)
+### 5.2 Pity accrual (handles unlock crossing)
 
-For a roll segment from `prevCum` to `cum = prevCum + rolls`, a node accrues pity only on rolls where it was active (enabled going in, unlocked). A node unlocked at threshold `T` first rolls at `T+1`, so the segment start is clamped to `max(prevCum, T)`:
+For a roll segment from `prevCum` to `cum = prevCum + rolls`, a node accrues pity only on rolls where it was active (enabled going in, unlocked). The roll that crosses a node's unlock threshold `T` counts as its first pity, so a freshly unlocked node reads pity 1 (not 0); the segment start is clamped to `max(prevCum, T - 1)`. Once a node is already unlocked (`prevCum >= T`) the `T - 1` term is a no-op, so it only ever adds that single unlock roll, and Node 1 (`T = 0`) is unaffected:
 
 ```typescript
-const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, T));
+const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, T - 1));
 const reached = node.pity + accruing;   // pity-at-gold when this node is a gold hit
 node.pity = isGoldHit ? 0 : reached;    // reset on gold
 ```
@@ -213,7 +217,7 @@ node.pity = isGoldHit ? 0 : reached;    // reset on gold
 
 ### 5.4 Node 5 derivation
 
-Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled and has no pity. The in-game set derivation is not modeled (variant is not tracked).
+Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled and has no pity. The in-game set derivation is not modeled (variant is not tracked).
 
 ### 5.5 Revert
 
@@ -223,7 +227,11 @@ Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled a
 
 `goldPityColor(pity)` → `green` (`< 30`) / `yellow` (`< 50`) / `red` (`>= 50`). `isSoon(node)` → true for an enabled, unlocked, non-gold node whose `pity >= 30`.
 
-### 5.7 Notes
+### 5.7 Gold-luck distribution
+
+`goldPityDistribution(milestones)` pools every recorded gold hit (each milestone's `goldPity`, across the rollable nodes — Node 5 has no pity and is excluded) into fixed `GOLD_BUCKET_SIZE`-wide ranges spanning `1..HARD_PITY` (e.g. `1-5, 6-10, … 86-90`) and returns the buckets plus the total gold count. Because it reads `goldPity`, it counts every gold *event* in the session (even ones later re-rolled away) and re-derives on edit/delete. The `GoldStats` rail renders it as colored bars (the same luck colors as the table) across the full set of pity ranges, including empty ones, so the scale stays stable.
+
+### 5.8 Notes
 
 - **Minimal input**: only gold hits affect pity; non-gold blue/purple results are not required.
 - **Re-rolling an unlocked gold** clears its gold marker (it was gambled away) and pity climbs from 0 again — so a gold star only persists into later rows when the node is **locked**. A node unlocked mid-batch can be recorded as a gold hit in that same milestone.
@@ -235,15 +243,18 @@ Node 5 auto-golds once `cum >= 100` (shown simply as gold); it is never rolled a
 ### 6.1 Components ([apps/reforge/src/components](../apps/reforge/src/components))
 
 - **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels), **Export** (downloads the active session as JSON), **Import** (reads a JSON file and adds it as a new session), and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default. Export/import logic lives in the pure [sessionIo.ts](../apps/reforge/src/lib/sessionIo.ts) (validates the file envelope and strictly sanitizes inputs); the DOM glue (download/file-read) is the only non-pure part.
-- **CurrentStateBar** — session totals, next-roll cost, a per-node chip row (pity, tier, inline lock toggle, the about-to-pop pulse), and the action buttons (Record rolls / gold, Revert, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete).
-- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. Edit/Delete appear on the latest row only (Edit hidden for lock rows). Horizontally scrollable with a sticky `#` column on mobile.
+- **CurrentStateBar** — session totals, roll cost, a per-node chip row (pity, a gold border + star when the node is gold instead of a tier word, inline lock toggle, the about-to-pop pulse), and the action buttons (Add Rolls, Restore Plan, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete).
+- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. A gold-hit roll's Milestone label shows each node name followed by a gold star icon (e.g. "Color *, Part 1 *") rather than the longer "-> Gold" text. Edit/Delete appear on the latest row only (Edit hidden for lock rows). Horizontally scrollable with a sticky `#` column on mobile.
 - **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable, unlocked node enabled by the **end** of the entered batch — so nodes that unlock within those rolls appear too. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
-- **RevertMilestoneForm** — per enabled node a gold + lock toggle (no variant); all pity resets to 0.
+- **RevertMilestoneForm** — per enabled node a gold + lock toggle (no variant); all pity resets to 0. Surfaced as the "Restore Plan" action (the in-game save/restore).
+- **Legend** — a static left rail keying the table's cues (gold-luck colors with their thresholds, the about-to-pop pulse, and the star / lock / Misc-auto-gold marks). Reuses the same constants and `LUCK_BG` classes as the table so it never drifts.
+- **GoldStats** — a right rail showing the gold-luck distribution: per pity range (size-5 buckets) a colored bar plus the count, with a total. Pure data from `goldPityDistribution`; re-derives on edit/delete; empty until the first gold.
 
 ### 6.2 Cell highlighting (milestone table)
 
-- **Gold-luck color** — on the row where a node turned gold, the cell background is colored by `goldPity` (rolls it took): green `< 30`, yellow `30-49`, red `>= 50`. The number is shown (`★ N`) so color is not the only signal.
+- **Gold-luck color** — on the row where a node turned gold, the cell background is colored by `goldPity` (rolls it took): green `< 30`, yellow `30-49`, red `>= 50`. The number is shown next to a star icon so color is not the only signal.
 - **About-to-pop pulse** — on the **latest row only**, an enabled, unlocked, non-gold node with `pity >= 30` gets a rotating, breathing rainbow gradient ring (`.animate-soon` in [index.css](../apps/reforge/src/index.css)); it honors `prefers-reduced-motion` with a static rainbow ring. The same pulse is mirrored on the current-state chips.
+- These cues are keyed in the **Legend** rail (left) rather than a caption under the table; the **GoldStats** rail (right) summarizes the gold-luck distribution across the whole session.
 
 ### 6.3 Theme
 
@@ -290,7 +301,7 @@ apps/reforge/
     ├── lib/
     │   ├── constants.ts
     │   ├── id.ts           # shared uid() (crypto.randomUUID) for session/milestone ids
-    │   ├── engine.ts       # pure logic (replay, pity accrual, cost, Node 5 auto-gold, revert, luck)
+    │   ├── engine.ts       # pure logic (replay, pity accrual, cost, Node 5 auto-gold, revert, luck, gold-luck distribution)
     │   ├── engine.test.ts  # Vitest unit tests
     │   ├── storage.ts      # localStorage load/save (v3) + pure coerceState migration
     │   ├── storage.test.ts # Vitest tests for coerceState (migration, repair, fallbacks)
@@ -299,7 +310,7 @@ apps/reforge/
     ├── hooks/
     │   ├── useReforgeSession.ts
     │   └── useReforgeSession.test.ts  # tests the pure nextSessionName helper
-    └── components/{SessionBar,CurrentStateBar,MilestoneTable,RollMilestoneForm,RevertMilestoneForm}.tsx
+    └── components/{SessionBar,CurrentStateBar,MilestoneTable,RollMilestoneForm,RevertMilestoneForm,Legend,GoldStats}.tsx
 ```
 
 ### 7.3 Persistence
@@ -325,7 +336,7 @@ The reforge app deploys to **Vercel** (the Boss Guide stays on GitHub Pages).
 | Build command | `vite build` (via `pnpm build`) |
 | Output directory | `dist` |
 | Install | pnpm workspace install at repo root (keep "Include files outside the root directory" enabled) |
-| Node version | from root `package.json` `engines.node` = `22.x` (Vercel ignores `.nvmrc`); can also be set in the Vercel dashboard |
+| Node version | from root `package.json` `engines.node` = `24.x` (Vercel ignores `.nvmrc`); can also be set in the Vercel dashboard |
 | Package manager | detected from the root lockfile / `packageManager` field |
 
 Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Vercel serves the app at its own domain root; [apps/reforge/vercel.json](../apps/reforge/vercel.json) adds an SPA rewrite (`/(.*)` → `/index.html`) for deep-link safety.

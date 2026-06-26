@@ -59,17 +59,13 @@ A weapon skin has **5 nodes**:
 - Pity **resets to 0** when that node hits gold.
 - **Hard pity = 90** (guaranteed gold). Observed **soft pity ≈ 30-40**.
 
-### 2.4 Unlocks (by total rolls)
+### 2.4 Unlocks (manual, sequential)
 
-Nodes unlock sequentially as total rolls accumulate. Pity is only tracked once a node is enabled. Unlocks are **permanent**.
+Nodes unlock sequentially (Node 1 -> 2 -> 3 -> 4 -> 5) as total rolls accumulate, but the roll totals that trigger each unlock **vary per weapon skin**, so the app does **not** derive them from a fixed threshold. Instead the player records an **unlock milestone** when a node lights up in-game. Node 1 (Color) is the only node enabled from the start. Pity is only tracked once a node is enabled, and unlocks are **permanent**.
 
-| Node | Enabled at (total rolls) |
-|------|--------------------------|
-| 1 | 0 (enabled from the start) |
-| 2 | 24 |
-| 3 | 40 |
-| 4 | 70 |
-| 5 | 99 |
+The unlock roll counts as the node's first pity, so a freshly unlocked node reads **pity 1** (Misc/Node 5 has no pity and turns gold instead). The UI enforces the sequential order - only the next locked node can be unlocked.
+
+> Earlier versions auto-enabled nodes at fixed totals (24 / 40 / 70 / 99). Those are now kept only as `LEGACY_UNLOCK_ROLLS` to migrate pre-manual sessions (see §7.3).
 
 ### 2.5 Node 5 (Misc) — special
 
@@ -120,7 +116,7 @@ Reforge Pity Tracker (/)
     └── GoldStats (right) — gold counts per pity range (size-5 buckets)
 ```
 
-Everything in the tracker column reflects the **active** session; switching sessions swaps the whole view (current state, forms, table, and the gold-luck stats). Lock/unlock is done by clicking a node chip's lock toggle, which appends a lock milestone to the active session. The current state is simply the last row of the table.
+Everything in the tracker column reflects the **active** session; switching sessions swaps the whole view (current state, forms, table, and the gold-luck stats). Locking/unlocking an **enabled** node is done by clicking its chip's lock toggle (appends a lock milestone); **enabling** the next not-yet-unlocked node is done by its chip's Unlock button (appends an unlock milestone). The current state is simply the last row of the table.
 
 ---
 
@@ -145,9 +141,11 @@ interface RevertNodeInput { id: NodeId; gold: boolean; locked: boolean }
 
 // The user-authored unit; everything else is derived from an ordered array.
 // A roll's goldHits is just the ids of the nodes that turned gold (no variant -
-// this is a pure pity tracker).
+// this is a pure pity tracker). An `unlock` enables a node (pity 1; Misc gold) -
+// recorded manually because the unlock roll totals vary per weapon.
 type MilestoneInput =
   | { id: string; type: 'roll'; rolls: number; goldHits: NodeId[] }
+  | { id: string; type: 'unlock'; nodeId: NodeId }
   | { id: string; type: 'lock'; nodeId: NodeId; locked: boolean }
   | { id: string; type: 'revert'; nodes: RevertNodeInput[] };
 
@@ -165,19 +163,21 @@ interface Milestone {
 // A named session is just its ordered inputs; its table is derived on demand.
 interface Session { id: string; name: string; inputs: MilestoneInput[] }
 
-// v3 holds many named sessions plus the active one's id. (v2 was a single
-// `inputs` array, migrated into one Session on load - see storage.ts#coerceState.)
-interface PersistedState { version: 3; sessions: Session[]; activeSessionId: string }
+// v4 holds many named sessions plus the active one's id. Older shapes are
+// migrated on load - v2 (single `inputs` array) and v3 (pre-manual-unlock) both
+// have their unlock milestones synthesized. See storage.ts#coerceState.
+interface PersistedState { version: 4; sessions: Session[]; activeSessionId: string }
 
 // JSON envelope for a single exported/imported session (one file = one session).
 // `exportVersion` is the file-format version, separate from PersistedState.version;
-// the session id is omitted and minted fresh on import. See lib/sessionIo.ts.
-interface SessionExport { type: 'wwm-reforge-session'; exportVersion: 1; exportedAt: string; name: string; inputs: MilestoneInput[] }
+// v2 carries explicit unlocks (v1 files are migrated on import); the session id is
+// omitted and minted fresh on import. See lib/sessionIo.ts.
+interface SessionExport { type: 'wwm-reforge-session'; exportVersion: 2; exportedAt: string; name: string; inputs: MilestoneInput[] }
 ```
 
 `goldPity` records how many rolls each node took to gold in that milestone (its pity just before the reset). The snapshot pity is 0 afterward, so `goldPity` is what drives the gold-luck cell color.
 
-Constants live in [apps/reforge/src/lib/constants.ts](../apps/reforge/src/lib/constants.ts): `UNLOCK_ROLLS`, `ROLL_COST_BY_LOCKED`, `SOFT_PITY`, `HARD_PITY`, `ROLLABLE_NODE_IDS`, `AUTO_GOLD_NODE`, `GOLD_LUCK` (30/50 color thresholds), `SOON_PITY` (about-to-pop floor), and `GOLD_BUCKET_SIZE` (pity-range width for the gold-luck stats).
+Constants live in [apps/reforge/src/lib/constants.ts](../apps/reforge/src/lib/constants.ts): `INITIALLY_ENABLED_NODE_IDS` (just Node 1), `LEGACY_UNLOCK_ROLLS` (migration-only - see §7.3), `ROLL_COST_BY_LOCKED`, `SOFT_PITY`, `HARD_PITY`, `ROLLABLE_NODE_IDS`, `AUTO_GOLD_NODE`, `GOLD_LUCK` (30/50 color thresholds), `SOON_PITY` (about-to-pop floor), and `GOLD_BUCKET_SIZE` (pity-range width for the gold-luck stats).
 
 ---
 
@@ -193,23 +193,27 @@ Framework-free, unit-tested functions in [apps/reforge/src/lib/engine.ts](../app
 flowchart TD
     inputs["MilestoneInput[]"] --> fold["replay: fold from initial nodes"]
     fold --> kind{"input type"}
-    kind -->|"roll"| r["cumRolls += N; pity += activeRolls; golds -> pity 0 + record goldPity; stones += N * cost(lockedCount)"]
+    kind -->|"roll"| r["cumRolls += N; pity += N for enabled, unlocked nodes; golds -> pity 0 + record goldPity; stones += N * cost(lockedCount)"]
+    kind -->|"unlock"| u["enabled = true; pity = 1 (Misc: tier gold, pity 0); 0 rolls/stones"]
     kind -->|"lock"| l["toggle node.locked (0 rolls/stones)"]
-    kind -->|"revert"| v["set gold + lock per node (no variant); all pity = 0"]
+    kind -->|"revert"| v["set gold + lock per node (no variant); all pity = 0; enabled kept"]
     r --> snap["push snapshot"]
+    u --> snap
     l --> snap
     v --> snap
 ```
 
-### 5.2 Pity accrual (handles unlock crossing)
+### 5.2 Pity accrual
 
-For a roll segment from `prevCum` to `cum = prevCum + rolls`, a node accrues pity only on rolls where it was active (enabled going in, unlocked). The roll that crosses a node's unlock threshold `T` counts as its first pity, so a freshly unlocked node reads pity 1 (not 0); the segment start is clamped to `max(prevCum, T - 1)`. Once a node is already unlocked (`prevCum >= T`) the `T - 1` term is a no-op, so it only ever adds that single unlock roll, and Node 1 (`T = 0`) is unaffected:
+Since unlocking is its own milestone (which already grants the first pity), a roll segment simply adds `rolls` to every node that is enabled and not locked - no unlock-threshold clamp:
 
 ```typescript
-const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, T - 1));
+const accruing = node.locked || !node.enabled ? 0 : rolls;
 const reached = node.pity + accruing;   // pity-at-gold when this node is a gold hit
-node.pity = isGoldHit ? 0 : reached;    // reset on gold
+node.pity = isGoldHit ? 0 : reached;    // reset on gold (only enabled nodes can gold)
 ```
+
+`applyUnlock` enables a node and sets its pity to 1 (the unlock roll), or marks Misc gold with pity 0. It is idempotent, so re-unlocking an already-enabled node never resets its pity.
 
 ### 5.3 Cost
 
@@ -217,7 +221,7 @@ node.pity = isGoldHit ? 0 : reached;    // reset on gold
 
 ### 5.4 Node 5 derivation
 
-Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled and has no pity. The in-game set derivation is not modeled (variant is not tracked).
+Node 5 turns gold the moment it is unlocked (its `unlock` milestone sets `tier: 'gold'`, pity 0); it is never rolled and has no pity. The in-game set derivation is not modeled (variant is not tracked).
 
 ### 5.5 Revert
 
@@ -234,7 +238,8 @@ Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled an
 ### 5.8 Notes
 
 - **Minimal input**: only gold hits affect pity; non-gold blue/purple results are not required.
-- **Re-rolling an unlocked gold** clears its gold marker (it was gambled away) and pity climbs from 0 again — so a gold star only persists into later rows when the node is **locked**. A node unlocked mid-batch can be recorded as a gold hit in that same milestone.
+- **Re-rolling an unlocked gold** clears its gold marker (it was gambled away) and pity climbs from 0 again — so a gold star only persists into later rows when the node is **locked**.
+- **Unlock before gold**: a node must be unlocked (its own milestone) before its golds can be recorded - the roll form only offers already-unlocked nodes. So a node that unlocked during a batch is recorded as an unlock first, then its gold on a following roll.
 
 ---
 
@@ -243,9 +248,9 @@ Node 5 auto-golds once `cum >= 99` (shown simply as gold); it is never rolled an
 ### 6.1 Components ([apps/reforge/src/components](../apps/reforge/src/components))
 
 - **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels), **Export** (downloads the active session as JSON), **Import** (reads a JSON file and adds it as a new session), and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default. Export/import logic lives in the pure [sessionIo.ts](../apps/reforge/src/lib/sessionIo.ts) (validates the file envelope and strictly sanitizes inputs); the DOM glue (download/file-read) is the only non-pure part.
-- **CurrentStateBar** — session totals, roll cost, a per-node chip row (pity, a gold border + star when the node is gold instead of a tier word, inline lock toggle, the about-to-pop pulse), and the action buttons (Add Rolls, Restore Plan, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete).
-- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. A gold-hit roll's Milestone label shows each node name followed by a gold star icon (e.g. "Color *, Part 1 *") rather than the longer "-> Gold" text. Edit/Delete appear on the latest row only (Edit hidden for lock rows). Horizontally scrollable with a sticky `#` column on mobile.
-- **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable, unlocked node enabled by the **end** of the entered batch — so nodes that unlock within those rolls appear too. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
+- **CurrentStateBar** — session totals, roll cost, a per-node chip row (pity, a gold border + star when the node is gold instead of a tier word, inline lock toggle, the about-to-pop pulse), and the action buttons (Add Rolls, Restore Plan, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete). A locked-out (not-yet-unlocked) node's chip shows an **Unlock** button, but only for the next node in sequence (via `nextUnlockableNodeId`); later nodes read "after &lt;previous node&gt;". Unlocking Misc turns it gold.
+- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. A gold-hit roll's Milestone label shows each node name followed by a gold star icon (e.g. "Color *, Part 1 *") rather than the longer "-> Gold" text. Edit/Delete appear on the latest row only (Edit hidden for lock **and unlock** rows, which carry no roll/revert data). Horizontally scrollable with a sticky `#` column on mobile.
+- **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable node that is already **unlocked** and not locked (via `rollableNodes`). A node must be unlocked from its chip first, so the form notes that and offers no future-unlock projection. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
 - **RevertMilestoneForm** — per enabled node a gold + lock toggle (no variant); all pity resets to 0. Surfaced as the "Restore Plan" action (the in-game save/restore).
 - **Legend** — a static left rail keying the table's cues (gold-luck colors with their thresholds, the about-to-pop pulse, and the star / lock / Misc-auto-gold marks). Reuses the same constants and `LUCK_BG` classes as the table so it never drifts.
 - **GoldStats** — a right rail showing the gold-luck distribution: per pity range (size-5 buckets) a colored bar plus the count, with a total. Pure data from `goldPityDistribution`; re-derives on edit/delete; empty until the first gold.
@@ -301,9 +306,11 @@ apps/reforge/
     ├── lib/
     │   ├── constants.ts
     │   ├── id.ts           # shared uid() (crypto.randomUUID) for session/milestone ids
-    │   ├── engine.ts       # pure logic (replay, pity accrual, cost, Node 5 auto-gold, revert, luck, gold-luck distribution)
+    │   ├── engine.ts       # pure logic (replay, pity accrual, cost, manual unlock, Node 5 gold, revert, luck, gold-luck distribution)
     │   ├── engine.test.ts  # Vitest unit tests
-    │   ├── storage.ts      # localStorage load/save (v3) + pure coerceState migration
+    │   ├── migrate.ts      # pure synthesizeUnlocks: insert unlock milestones into pre-manual (v1/v2/v3) inputs
+    │   ├── migrate.test.ts # Vitest tests for synthesizeUnlocks (splitting, fidelity, idempotency)
+    │   ├── storage.ts      # localStorage load/save (v4) + pure coerceState migration
     │   ├── storage.test.ts # Vitest tests for coerceState (migration, repair, fallbacks)
     │   ├── sessionIo.ts    # pure session JSON export/import (serialize, sanitize, parse)
     │   └── sessionIo.test.ts # Vitest tests for serialize/parse/sanitize
@@ -315,13 +322,16 @@ apps/reforge/
 
 ### 7.3 Persistence
 
-A single key `wwm-reforge` holds `{ version: 3, sessions, activeSessionId }` — only each session's milestone inputs, since the tables are derived. `loadState`/`saveState` probe `localStorage` and fall back to an in-memory store when it is unavailable (e.g. private mode). On load, the pure `coerceState` validates the payload and:
+A single key `wwm-reforge` holds `{ version: 4, sessions, activeSessionId }` — only each session's milestone inputs, since the tables are derived. `loadState`/`saveState` probe `localStorage` and fall back to an in-memory store when it is unavailable (e.g. private mode). On load, the pure `coerceState` validates the payload and:
 
 - **migrates** the older single-session v2 shape (`{ version: 2, inputs }`) into one named `Session`, preserving an in-progress session (including legacy object-shaped `goldHits`);
-- **repairs** a v3 payload (generates missing ids, defaults blank names, de-dupes ids, drops non-object entries, falls back to the first session when `activeSessionId` is dangling);
+- **migrates** a pre-manual-unlock v3 payload by synthesizing the missing `unlock` milestones per session (via `synthesizeUnlocks`), then repairing it;
+- **repairs** a v4 payload (generates missing ids, defaults blank names, de-dupes ids, drops non-object entries, falls back to the first session when `activeSessionId` is dangling) without re-synthesizing;
 - **resets** anything else (v1, an empty `sessions` array, unknown/missing version, or malformed JSON) to a single fresh default session.
 
-This guarantees there is always at least one session with a resolvable `activeSessionId`. Note two accepted trade-offs: an older v2 build that later reads a v3 payload will reset (forward-incompatible, same as any version mismatch); and because each tab persists the whole list, two tabs editing **different** sessions can overwrite each other (last write wins) — a known limitation for this version.
+`synthesizeUnlocks` ([lib/migrate.ts](../apps/reforge/src/lib/migrate.ts)) **splits** a roll batch at each legacy threshold (`LEGACY_UNLOCK_ROLLS`) it crosses and inserts the `unlock` there, so per-node pity stays numerically exact. The batch's original golds attach to its final roll piece; the only case it cannot represent is a node that both unlocked and golded on the exact same crossing roll (that single gold is dropped). It is idempotent (a no-op once explicit unlocks exist). The same helper migrates legacy (exportVersion 1) session files on import (see [lib/sessionIo.ts](../apps/reforge/src/lib/sessionIo.ts); current files are exportVersion 2).
+
+This guarantees there is always at least one session with a resolvable `activeSessionId`. Note two accepted trade-offs: an older build that later reads a v4 payload will reset (forward-incompatible, same as any version mismatch); and because each tab persists the whole list, two tabs editing **different** sessions can overwrite each other (last write wins) — a known limitation for this version.
 
 ---
 
@@ -362,7 +372,8 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 
 - [ ] Record cosmetic blue/purple tiers for the "current look" display
 - [x] Export / import a session as JSON (backup, move devices) — per-session via SessionBar
-- [ ] Settings panel to tweak soft-pity / unlock / cost constants per skin
+- [x] Per-weapon unlocks handled via manual `unlock` milestones (the totals vary per skin, so they are no longer fixed constants)
+- [ ] Settings panel to tweak soft-pity / cost constants per skin
 - [ ] Optional "possible missed gold" hint when a node's pity passes hard pity (90)
 
 ### Phase 3 — Future
@@ -386,7 +397,7 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 | # | Question | Impact |
 |---|----------|--------|
 | 1 | Is Node 5 ever lockable / counted in roll cost? (Assumed no.) | If yes, a 4-locked stone cost is needed |
-| 2 | Are the soft-pity (~30-40) and unlock numbers stable across skins? | Constants may need to be configurable per skin |
+| 2 | Are the soft-pity (~30-40) numbers stable across skins? | Constants may need to be configurable per skin (unlock totals are already handled via manual unlock milestones) |
 
 ---
 

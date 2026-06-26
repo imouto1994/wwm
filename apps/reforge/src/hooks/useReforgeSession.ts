@@ -21,6 +21,7 @@ interface State {
 
 type Action =
   | { type: 'addRoll'; rolls: number; goldHits: NodeId[] }
+  | { type: 'addUnlock'; nodeId: NodeId }
   | { type: 'addLock'; nodeId: NodeId; locked: boolean }
   | { type: 'addRevert'; nodes: RevertNodeInput[] }
   | { type: 'editLatest'; input: MilestoneInput }
@@ -58,6 +59,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'addRoll':
       return updateActiveInputs(state, (inputs) => [...inputs, { id: uid(), type: 'roll', rolls: action.rolls, goldHits: action.goldHits }]);
+    case 'addUnlock':
+      return updateActiveInputs(state, (inputs) => [...inputs, { id: uid(), type: 'unlock', nodeId: action.nodeId }]);
     case 'addLock':
       return updateActiveInputs(state, (inputs) => [...inputs, { id: uid(), type: 'lock', nodeId: action.nodeId, locked: action.locked }]);
     case 'addRevert':
@@ -118,9 +121,9 @@ export function useReforgeSession() {
   const [state, dispatch] = useReducer(reducer, undefined, init);
 
   // Persist the whole session list on every change; derived tables are not stored.
-  // The first run also writes back any v2 -> v3 migration done on load.
+  // The first run also writes back any migration (v2/v3 -> v4) done on load.
   useEffect(() => {
-    saveState({ version: 3, sessions: state.sessions, activeSessionId: state.activeSessionId });
+    saveState({ version: 4, sessions: state.sessions, activeSessionId: state.activeSessionId });
   }, [state.sessions, state.activeSessionId]);
 
   // The reducer guarantees a non-empty list and a resolvable id, but fall back to
@@ -144,6 +147,7 @@ export function useReforgeSession() {
     canEditLatest: active.inputs.length > 0,
     latestType: latest?.input.type ?? null,
     addRoll: useCallback((rolls: number, goldHits: NodeId[]) => dispatch({ type: 'addRoll', rolls, goldHits }), []),
+    addUnlock: useCallback((nodeId: NodeId) => dispatch({ type: 'addUnlock', nodeId }), []),
     addLock: useCallback((nodeId: NodeId, locked: boolean) => dispatch({ type: 'addLock', nodeId, locked }), []),
     addRevert: useCallback((revertNodes: RevertNodeInput[]) => dispatch({ type: 'addRevert', nodes: revertNodes }), []),
     editLatest: useCallback((input: MilestoneInput) => dispatch({ type: 'editLatest', input }), []),

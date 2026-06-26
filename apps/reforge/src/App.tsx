@@ -33,12 +33,10 @@ export default function App() {
   // INTO that milestone (the milestone before it) so its gold/lock options match.
   const prevMilestone = milestones.length >= 2 ? milestones[milestones.length - 2] : null;
   const formBaseNodes = form?.edit ? (prevMilestone ? prevMilestone.nodes : createInitialNodes()) : nodes;
-  // Cumulative rolls going into the segment the form edits/adds (drives the
-  // form's "which nodes unlock within these rolls" detection).
-  const formBaseRolls = form?.edit ? (prevMilestone ? prevMilestone.cumulativeRolls : 0) : session.totalRolls;
 
   function openEditLatest() {
-    if (!latest || latest.input.type === 'lock') return;
+    // Lock and unlock rows are not editable (they carry no roll/revert data).
+    if (!latest || latest.input.type === 'lock' || latest.input.type === 'unlock') return;
     setForm({ kind: latest.input.type, edit: true });
   }
 
@@ -103,6 +101,7 @@ export default function App() {
             nextCost={session.nextCost}
             nodes={nodes}
             onToggleLock={session.addLock}
+            onUnlock={session.addUnlock}
             onRecordRoll={() => setForm({ kind: 'roll', edit: false })}
             onRevert={() => setForm({ kind: 'revert', edit: false })}
             onReset={handleReset}
@@ -111,7 +110,6 @@ export default function App() {
           {form?.kind === 'roll' && (
             <RollMilestoneForm
               nodes={formBaseNodes}
-              baseRolls={formBaseRolls}
               initial={rollInitial}
               onSubmit={(rolls, goldHits) => {
                 if (form.edit) session.editLatest({ id: '', type: 'roll', rolls, goldHits });

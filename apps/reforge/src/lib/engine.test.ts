@@ -1,4 +1,4 @@
-import { createInitialNodes, currentNodes, goldPityColor, goldPityDistribution, isSoon, replay, rollableAfter } from '@/lib/engine';
+import { createInitialNodes, currentNodes, goldPityColor, goldPityDistribution, isSoon, nextUnlockableNodeId, replay, rollableNodes } from '@/lib/engine';
 import type { Milestone, MilestoneInput, NodeId, NodeSnapshot, RevertNodeInput } from '@/types/reforge';
 import { describe, expect, it } from 'vitest';
 
@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 let counter = 0;
 const id = () => `m${counter++}`;
 const roll = (rolls: number, goldHits: NodeId[] = []): MilestoneInput => ({ id: id(), type: 'roll', rolls, goldHits });
+const unlock = (nodeId: NodeId): MilestoneInput => ({ id: id(), type: 'unlock', nodeId });
 const lock = (nodeId: NodeId, locked: boolean): MilestoneInput => ({ id: id(), type: 'lock', nodeId, locked });
 const revert = (nodes: RevertNodeInput[]): MilestoneInput => ({ id: id(), type: 'revert', nodes });
 
@@ -42,34 +43,45 @@ describe('replay - rolls, pity and gold', () => {
   });
 });
 
-describe('unlock boundary (unlock roll counts as the first pity)', () => {
-  it('enables Node 2 at exactly 24 rolls and gives it pity 1 (the unlock roll)', () => {
-    const m = last(replay([roll(24)]));
-    expect(nodeOf(m.nodes, 2).enabled).toBe(true);
-    expect(nodeOf(m.nodes, 2).pity).toBe(1);
+describe('manual unlock (unlock roll counts as the first pity)', () => {
+  it('does NOT auto-enable a node from roll count alone', () => {
+    // No more threshold-based unlocking: 30 rolls leaves Node 2 disabled.
+    const m = last(replay([roll(30)]));
+    expect(nodeOf(m.nodes, 2).enabled).toBe(false);
+    expect(nodeOf(m.nodes, 1).pity).toBe(30);
   });
 
-  it('keeps accruing after the unlock roll', () => {
-    // 24 to unlock (pity 1), then 10 more: Node 2 -> 11, Node 1 -> 34.
-    const m = last(replay([roll(24), roll(10)]));
+  it('enables a node at pity 1 when an unlock milestone is recorded', () => {
+    const m = last(replay([roll(24), unlock(2)]));
+    expect(nodeOf(m.nodes, 2).enabled).toBe(true);
+    expect(nodeOf(m.nodes, 2).pity).toBe(1);
+    expect(nodeOf(m.nodes, 1).pity).toBe(24); // unchanged by the unlock
+  });
+
+  it('accrues pity on rolls after the unlock', () => {
+    // unlock (pity 1) then 10 more: Node 2 -> 11, Node 1 -> 34.
+    const m = last(replay([roll(24), unlock(2), roll(10)]));
     expect(nodeOf(m.nodes, 2).pity).toBe(11);
     expect(nodeOf(m.nodes, 1).pity).toBe(34);
   });
 
-  it('handles an unlock that happens mid-segment', () => {
-    // One batch of 30 crosses Node 2's threshold (24): rolls 24..30 -> pity 7.
-    const m = last(replay([roll(30)]));
-    expect(nodeOf(m.nodes, 2).enabled).toBe(true);
-    expect(nodeOf(m.nodes, 2).pity).toBe(7);
-    expect(nodeOf(m.nodes, 1).pity).toBe(30);
-  });
-
-  it('lets a node that unlocks mid-batch be recorded as a gold hit', () => {
-    // 30 rolls unlocks Node 2 (at 24) and it golds: pity-at-gold = rolls 24..30 = 7.
-    const m = last(replay([roll(30, [2])]));
+  it('lets a freshly unlocked node be recorded as a gold hit on a later roll', () => {
+    // unlock (pity 1), then 6 rolls and it golds: pity-at-gold = 7.
+    const m = last(replay([roll(24), unlock(2), roll(6, [2])]));
     expect(nodeOf(m.nodes, 2).tier).toBe('gold');
     expect(nodeOf(m.nodes, 2).pity).toBe(0);
     expect(m.goldPity?.[2]).toBe(7);
+  });
+
+  it('is idempotent: re-unlocking an enabled node does not reset its pity', () => {
+    const m = last(replay([roll(24), unlock(2), roll(5), unlock(2)]));
+    expect(nodeOf(m.nodes, 2).pity).toBe(6); // 1 (unlock) + 5, not reset to 1
+  });
+
+  it('does not accrue pity for a still-locked (disabled) node', () => {
+    const m = last(replay([roll(50)]));
+    expect(nodeOf(m.nodes, 3).enabled).toBe(false);
+    expect(nodeOf(m.nodes, 3).pity).toBe(0);
   });
 });
 
@@ -116,32 +128,45 @@ describe('revert', () => {
     expect(n1.tier).toBe('gold');
     expect(n1.locked).toBe(true);
   });
+
+  it('keeps a node enabled (unlocks are permanent) through a revert', () => {
+    const n2 = nodeOf(last(replay([roll(24), unlock(2), revert([{ id: 2, gold: false, locked: false }])])).nodes, 2);
+    expect(n2.enabled).toBe(true);
+    expect(n2.pity).toBe(0);
+  });
 });
 
-describe('Node 5 auto-gold', () => {
-  it('is not enabled before 99 cumulative rolls', () => {
-    expect(nodeOf(last(replay([roll(98)])).nodes, 5).enabled).toBe(false);
+describe('Node 5 (Misc) manual unlock', () => {
+  it('stays disabled no matter how many rolls without an unlock milestone', () => {
+    expect(nodeOf(last(replay([roll(120)])).nodes, 5).enabled).toBe(false);
   });
 
-  it('auto-golds at 99 with no pity', () => {
-    const n5 = nodeOf(last(replay([roll(99)])).nodes, 5);
+  it('turns gold with no pity when unlocked', () => {
+    const n5 = nodeOf(last(replay([roll(99), unlock(5)])).nodes, 5);
     expect(n5.enabled).toBe(true);
     expect(n5.tier).toBe('gold');
     expect(n5.pity).toBe(0);
   });
 });
 
-describe('rollableAfter', () => {
-  it('includes nodes that unlock within the entered rolls', () => {
-    const nodes = createInitialNodes(); // only Node 1 enabled at the start
-    expect(rollableAfter(nodes, 0)).toEqual([1]);
-    expect(rollableAfter(nodes, 24)).toEqual([1, 2]); // Node 2 unlocks at 24
-    expect(rollableAfter(nodes, 70)).toEqual([1, 2, 3, 4]);
+describe('rollableNodes', () => {
+  it('returns only enabled, unlocked rollable nodes', () => {
+    expect(rollableNodes(createInitialNodes())).toEqual([1]); // only Node 1 enabled
+    expect(rollableNodes(currentNodes(replay([roll(24), unlock(2)])))).toEqual([1, 2]);
+    expect(rollableNodes(currentNodes(replay([unlock(2), unlock(3), unlock(4)])))).toEqual([1, 2, 3, 4]);
   });
 
   it('excludes locked nodes', () => {
     const nodes = createInitialNodes().map((n) => (n.id === 1 ? { ...n, locked: true } : n));
-    expect(rollableAfter(nodes, 24)).toEqual([2]);
+    expect(rollableNodes(nodes)).toEqual([]);
+  });
+});
+
+describe('nextUnlockableNodeId (sequential gating)', () => {
+  it('points at the lowest not-yet-enabled node and is null when all are enabled', () => {
+    expect(nextUnlockableNodeId(createInitialNodes())).toBe(2);
+    expect(nextUnlockableNodeId(currentNodes(replay([unlock(2)])))).toBe(3);
+    expect(nextUnlockableNodeId(currentNodes(replay([unlock(2), unlock(3), unlock(4), unlock(5)])))).toBeNull();
   });
 });
 
@@ -184,13 +209,14 @@ describe('goldPityDistribution', () => {
   });
 
   it('pools golds across nodes and ignores Node 5 (auto-gold, no pity)', () => {
-    // One batch of 30 golds Node 1 (pity 30 -> 26-30 bucket) and Node 2 (pity 7 -> 6-10).
-    const dist = goldPityDistribution(replay([roll(30, [1, 2])]));
+    // Node 1 golds at pity 30 (26-30 bucket); Node 2, unlocked then rolled 6, golds
+    // at pity 7 (6-10 bucket).
+    const dist = goldPityDistribution(replay([roll(24), unlock(2), roll(6, [1, 2])]));
     expect(dist.total).toBe(2);
     expect(dist.buckets[1]).toMatchObject({ min: 6, max: 10, count: 1 });
     expect(dist.buckets[5]).toMatchObject({ min: 26, max: 30, count: 1 });
-    // Node 5 auto-golds at 99 but contributes nothing to the distribution.
-    expect(goldPityDistribution(replay([roll(99)])).total).toBe(0);
+    // Node 5 golds on unlock but has no pity, so it contributes nothing.
+    expect(goldPityDistribution(replay([roll(99), unlock(5)])).total).toBe(0);
   });
 });
 

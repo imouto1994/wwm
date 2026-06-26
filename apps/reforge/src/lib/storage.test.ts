@@ -2,13 +2,14 @@ import { coerceState } from '@/lib/storage';
 import { describe, expect, it } from 'vitest';
 
 // `coerceState` is the pure, window-free core of persistence: it migrates the
-// legacy v2 shape, repairs/drops malformed v3 entries, and always yields a valid
-// state with at least one session and a resolvable activeSessionId.
+// legacy v2 and pre-manual-unlock v3 shapes, repairs/drops malformed entries, and
+// always yields a valid state with at least one session and a resolvable
+// activeSessionId.
 
-describe('coerceState - v2 -> v3 migration', () => {
+describe('coerceState - v2 -> v4 migration', () => {
   it('wraps a v2 single-session payload into one active session', () => {
     const state = coerceState({ version: 2, inputs: [{ id: 'm1', type: 'roll', rolls: 10, goldHits: [] }] });
-    expect(state.version).toBe(3);
+    expect(state.version).toBe(4);
     expect(state.sessions).toHaveLength(1);
     expect(state.sessions[0].name).toBe('Session 1');
     expect(state.sessions[0].inputs).toHaveLength(1);
@@ -30,12 +31,38 @@ describe('coerceState - v2 -> v3 migration', () => {
   });
 });
 
-describe('coerceState - v3 happy path', () => {
-  it('round-trips a well-formed v3 payload unchanged', () => {
+describe('coerceState - v3 -> v4 migration', () => {
+  it('upgrades a well-formed v3 payload to v4, synthesizing no unlocks when none are needed', () => {
     const payload = {
       version: 3 as const,
       sessions: [
         { id: 's1', name: 'Alpha', inputs: [] },
+        { id: 's2', name: 'Beta', inputs: [{ id: 'm', type: 'lock', nodeId: 1, locked: true }] },
+      ],
+      activeSessionId: 's2',
+    };
+    // No roll crosses a threshold, so only the version changes.
+    expect(coerceState(payload)).toEqual({ ...payload, version: 4 });
+  });
+
+  it('synthesizes unlock milestones where a v3 session crossed the legacy thresholds', () => {
+    const state = coerceState({
+      version: 3,
+      sessions: [{ id: 's1', name: 'A', inputs: [{ id: 'm1', type: 'roll', rolls: 30, goldHits: [] }] }],
+      activeSessionId: 's1',
+    });
+    expect(state.version).toBe(4);
+    const types = state.sessions[0].inputs.map((i) => i.type);
+    expect(types).toEqual(['roll', 'unlock', 'roll']); // 30 rolls split at Node 2's threshold (24)
+  });
+});
+
+describe('coerceState - v4 happy path', () => {
+  it('round-trips a well-formed v4 payload unchanged (no re-synthesis)', () => {
+    const payload = {
+      version: 4 as const,
+      sessions: [
+        { id: 's1', name: 'Alpha', inputs: [{ id: 'u', type: 'unlock', nodeId: 2 }] },
         { id: 's2', name: 'Beta', inputs: [{ id: 'm', type: 'lock', nodeId: 1, locked: true }] },
       ],
       activeSessionId: 's2',
@@ -105,7 +132,7 @@ describe('coerceState - malformed and unknown payloads', () => {
   for (const bad of cases) {
     it(`resets to a single default session for ${JSON.stringify(bad)}`, () => {
       const state = coerceState(bad);
-      expect(state.version).toBe(3);
+      expect(state.version).toBe(4);
       expect(state.sessions).toHaveLength(1);
       expect(state.sessions[0].name).toBe('Session 1');
       expect(state.sessions[0].inputs).toEqual([]);

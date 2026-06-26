@@ -1,17 +1,20 @@
+import { uid } from '@/lib/id';
 /**
  * localStorage persistence for sessions.
  *
  * Only the milestone *inputs* of each session are stored (every table is derived
  * via replay). The payload is gated by a `version` field and run through
- * `coerceState`, which migrates the older single-session v2 shape and repairs or
- * discards anything malformed, so the engine is never fed a stale/invalid shape.
+ * `coerceState`, which migrates the older single-session v2 and pre-manual-unlock
+ * v3 shapes and repairs or discards anything malformed, so the engine is never
+ * fed a stale/invalid shape.
  */
-import { uid } from '@/lib/id';
+import { synthesizeUnlocks } from '@/lib/migrate';
 import type { MilestoneInput, PersistedState, Session } from '@/types/reforge';
 
 // Shared key across schema versions; the payload's `version` disambiguates.
 const STORAGE_KEY = 'wwm-reforge';
-const VERSION = 3 as const;
+// v4 added manual `unlock` milestones; v2/v3 are migrated by synthesizing them.
+const VERSION = 4 as const;
 
 const DEFAULT_SESSION_NAME = 'Session 1';
 
@@ -74,15 +77,22 @@ export function coerceState(parsed: unknown): PersistedState {
   if (typeof parsed !== 'object' || parsed === null) return emptyState();
   const raw = parsed as RawState;
 
-  // v2 -> v3: wrap the single inputs array into one named session.
+  // v2 -> v4: wrap the single inputs array into one named session, synthesizing
+  // the unlock milestones the old auto-unlock model left implicit.
   if (raw.version === 2) {
-    const session = makeSession(DEFAULT_SESSION_NAME, normalizeInputs(raw.inputs));
+    const session = makeSession(DEFAULT_SESSION_NAME, synthesizeUnlocks(normalizeInputs(raw.inputs)));
     return { version: VERSION, sessions: [session], activeSessionId: session.id };
   }
 
-  if (raw.version === VERSION) {
+  // v3 (pre-manual-unlock) and v4 share the multi-session shape. v3 inputs lack
+  // unlock milestones, so synthesize them per session; v4 is already migrated.
+  if (raw.version === 3 || raw.version === VERSION) {
     if (!Array.isArray(raw.sessions)) return emptyState();
-    const sessions = raw.sessions.map((s, i) => coerceSession(s, i)).filter((s): s is Session => s !== null);
+    const migrate = raw.version === 3;
+    const sessions = raw.sessions
+      .map((s, i) => coerceSession(s, i))
+      .filter((s): s is Session => s !== null)
+      .map((s) => (migrate ? { ...s, inputs: synthesizeUnlocks(s.inputs) } : s));
     if (sessions.length === 0) return emptyState();
 
     // Defensive: ensure ids are unique so a switch/update targets exactly one

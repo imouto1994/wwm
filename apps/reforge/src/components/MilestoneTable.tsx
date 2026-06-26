@@ -123,7 +123,7 @@ function MilestoneRow({
       <td className='px-2 py-1.5 text-center whitespace-nowrap'>
         {isLatest ? (
           <span className='inline-flex gap-1'>
-            {m.input.type !== 'lock' && (
+            {m.input.type !== 'lock' && m.input.type !== 'unlock' && (
               <button
                 type='button'
                 onClick={onEditLatest}

@@ -5,15 +5,20 @@
  * envelope and, crucially, *strictly sanitizes* the milestone inputs. The engine
  * `replay` switches on `input.type` with no default case, so an untrusted file
  * with a malformed input could otherwise produce broken snapshots - sanitizing
- * here is the safety net. All node references are constrained to the rollable
- * nodes (1-4); Node 5 is auto-gold and never appears in real inputs.
+ * here is the safety net. Roll/lock/revert node references are constrained to the
+ * rollable nodes (1-4); an `unlock` may also target Node 5 (Misc), which is
+ * auto-gold once unlocked.
  */
-import { ROLLABLE_NODE_IDS } from '@/lib/constants';
+import { NODE_IDS, ROLLABLE_NODE_IDS } from '@/lib/constants';
 import { uid } from '@/lib/id';
+import { synthesizeUnlocks } from '@/lib/migrate';
 import type { MilestoneInput, NodeId, RevertNodeInput, Session, SessionExport } from '@/types/reforge';
 
 export const EXPORT_TYPE = 'wwm-reforge-session' as const;
-export const EXPORT_VERSION = 1 as const;
+// v2 added manual `unlock` milestones; v1 files are migrated on import.
+export const EXPORT_VERSION = 2 as const;
+// Earliest file format we still accept (and migrate forward) on import.
+const MIN_EXPORT_VERSION = 1 as const;
 
 export type ParseResult = { ok: true; name: string; inputs: MilestoneInput[] } | { ok: false; error: string };
 
@@ -34,6 +39,12 @@ function isRollableNodeId(value: unknown): value is NodeId {
   return typeof value === 'number' && (ROLLABLE_NODE_IDS as number[]).includes(value);
 }
 
+// Any valid node id (1-5). Used for `unlock`, which - unlike lock/revert - may
+// target Node 5 (Misc).
+function isNodeId(value: unknown): value is NodeId {
+  return typeof value === 'number' && (NODE_IDS as number[]).includes(value);
+}
+
 // Accept a plain node id or a legacy `{ id }` object (mirrors storage#normalizeInputs).
 function toNodeId(hit: unknown): unknown {
   return typeof hit === 'number' ? hit : (hit as { id?: unknown })?.id;
@@ -44,6 +55,11 @@ function sanitizeRoll(r: Record<string, unknown>): MilestoneInput | null {
   if (typeof rolls !== 'number' || !Number.isInteger(rolls) || rolls <= 0) return null;
   const goldHits = Array.isArray(r.goldHits) ? r.goldHits.map(toNodeId).filter(isRollableNodeId) : [];
   return { id: uid(), type: 'roll', rolls, goldHits };
+}
+
+function sanitizeUnlock(r: Record<string, unknown>): MilestoneInput | null {
+  if (!isNodeId(r.nodeId)) return null;
+  return { id: uid(), type: 'unlock', nodeId: r.nodeId };
 }
 
 function sanitizeLock(r: Record<string, unknown>): MilestoneInput | null {
@@ -74,7 +90,16 @@ export function sanitizeMilestoneInputs(inputs: unknown): MilestoneInput[] {
   for (const raw of inputs) {
     if (typeof raw !== 'object' || raw === null) continue;
     const r = raw as Record<string, unknown>;
-    const sanitized = r.type === 'roll' ? sanitizeRoll(r) : r.type === 'lock' ? sanitizeLock(r) : r.type === 'revert' ? sanitizeRevert(r) : null;
+    const sanitized =
+      r.type === 'roll'
+        ? sanitizeRoll(r)
+        : r.type === 'unlock'
+          ? sanitizeUnlock(r)
+          : r.type === 'lock'
+            ? sanitizeLock(r)
+            : r.type === 'revert'
+              ? sanitizeRevert(r)
+              : null;
     if (sanitized) result.push(sanitized);
   }
   return result;
@@ -99,11 +124,14 @@ export function parseSessionExport(text: string): ParseResult {
   if (r.type !== EXPORT_TYPE) {
     return { ok: false, error: 'This file is not a Reforge session export.' };
   }
-  if (r.exportVersion !== EXPORT_VERSION) {
+  if (typeof r.exportVersion !== 'number' || r.exportVersion < MIN_EXPORT_VERSION || r.exportVersion > EXPORT_VERSION) {
     return { ok: false, error: 'Unsupported export version.' };
   }
   const name = typeof r.name === 'string' ? r.name : '';
-  return { ok: true, name, inputs: sanitizeMilestoneInputs(r.inputs) };
+  const inputs = sanitizeMilestoneInputs(r.inputs);
+  // Pre-manual-unlock files (v1) have no unlock milestones; synthesize them so an
+  // old backup replays correctly. v2+ already carries explicit unlocks.
+  return { ok: true, name, inputs: r.exportVersion < EXPORT_VERSION ? synthesizeUnlocks(inputs) : inputs };
 }
 
 // Safe download filename, e.g. "reforge-session-1-2026-06-17.json".

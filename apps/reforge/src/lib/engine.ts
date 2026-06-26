@@ -12,30 +12,25 @@ import {
   GOLD_BUCKET_SIZE,
   GOLD_LUCK,
   HARD_PITY,
+  INITIALLY_ENABLED_NODE_IDS,
   NODE_IDS,
   NODE_LABELS,
   ROLLABLE_NODE_IDS,
   ROLL_COST_BY_LOCKED,
   SOON_PITY,
-  UNLOCK_ROLLS,
 } from '@/lib/constants';
 import type { Milestone, MilestoneInput, NodeId, NodeSnapshot } from '@/types/reforge';
 
 // Opening state of a fresh session: only Node 1 is enabled, nothing locked,
-// no pity, no results yet.
+// no pity, no results yet. Other nodes unlock via `unlock` milestones.
 export function createInitialNodes(): NodeSnapshot[] {
   return NODE_IDS.map((id) => ({
     id,
-    enabled: UNLOCK_ROLLS[id] === 0,
+    enabled: INITIALLY_ENABLED_NODE_IDS.includes(id),
     locked: false,
     pity: 0,
     tier: null,
   }));
-}
-
-// A node is enabled once cumulative rolls reach its unlock threshold.
-export function isNodeEnabled(id: NodeId, cumulativeRolls: number): boolean {
-  return cumulativeRolls >= UNLOCK_ROLLS[id];
 }
 
 // Locked rollable nodes drive the roll cost. Node 5 is auto-gold and never counted.
@@ -54,11 +49,20 @@ export function nextRollCost(nodes: NodeSnapshot[]): number {
   return rollCost(lockedRollableCount(nodes));
 }
 
-// Nodes a gold can be recorded for, given the cumulative rolls *after* the batch
-// being entered. Rollable (1-4), not locked, and enabled at that point - so a
-// node that unlocks part-way through the entered rolls is offered too.
-export function rollableAfter(nodes: NodeSnapshot[], cumulativeAfter: number): NodeId[] {
-  return nodes.filter((n) => ROLLABLE_NODE_IDS.includes(n.id) && !n.locked && isNodeEnabled(n.id, cumulativeAfter)).map((n) => n.id);
+// Nodes a gold can be recorded for: rollable (1-4), enabled (already unlocked),
+// and not locked. Unlocking is its own milestone now, so this no longer projects
+// future unlocks - a node must be unlocked before its golds can be recorded.
+export function rollableNodes(nodes: NodeSnapshot[]): NodeId[] {
+  return nodes.filter((n) => ROLLABLE_NODE_IDS.includes(n.id) && n.enabled && !n.locked).map((n) => n.id);
+}
+
+// The next node the player can unlock. In-game nodes unlock strictly in order
+// (Part 1 -> Part 2 -> Part 3 -> Misc), so the UI only offers the lowest-id
+// not-yet-enabled node. Returns null once everything is unlocked. The engine
+// itself stays permissive; this only drives the UI's sequential gating.
+export function nextUnlockableNodeId(nodes: NodeSnapshot[]): NodeId | null {
+  const next = NODE_IDS.find((id) => !nodes.find((n) => n.id === id)?.enabled);
+  return next ?? null;
 }
 
 // Enabled nodes that can be locked or set in a revert (everything but Node 5).
@@ -90,6 +94,8 @@ function labelFor(input: MilestoneInput): string {
       }
       return input.goldHits.map((id) => `${NODE_LABELS[id]} -> Gold`).join(', ');
     }
+    case 'unlock':
+      return `Unlock ${NODE_LABELS[input.nodeId]}`;
     case 'lock':
       return `${input.locked ? 'Lock' : 'Unlock'} ${NODE_LABELS[input.nodeId]}`;
     case 'revert':
@@ -108,48 +114,43 @@ interface RollResult {
  * previous node state. Lock config is constant across the batch (lock changes
  * are their own milestones), so the cost is simply `rolls * cost(lockedCount)`.
  */
-function applyRoll(prevNodes: NodeSnapshot[], prevCum: number, rolls: number, goldHits: NodeId[]): RollResult {
-  const cum = prevCum + rolls;
+function applyRoll(prevNodes: NodeSnapshot[], rolls: number, goldHits: NodeId[]): RollResult {
   const stones = rolls * rollCost(lockedRollableCount(prevNodes));
   const golds = new Set<NodeId>(goldHits);
   const goldPity: Partial<Record<NodeId, number>> = {};
 
   const nodes = prevNodes.map((node) => {
-    const enabled = isNodeEnabled(node.id, cum);
-
-    // Node 5 is auto-gold once enabled; it is never rolled and has no pity.
+    // Node 5 is auto-gold while enabled; it is never rolled and has no pity. Its
+    // `enabled` is set by an unlock milestone, so leave it untouched here.
     if (node.id === AUTO_GOLD_NODE) {
-      return { ...node, enabled, tier: enabled ? ('gold' as const) : null, pity: 0 };
+      return { ...node, tier: node.enabled ? ('gold' as const) : null, pity: 0 };
     }
 
-    // Rolls during which this node was actually active: enabled going into the
-    // roll and not locked. The roll that crosses a node's unlock threshold T
-    // counts as its first pity, so a freshly unlocked node reads pity 1 (not 0).
-    // We clamp the segment start to max(prevCum, T - 1): once a node is golding
-    // again later (prevCum >= T) the `T - 1` term is a no-op, so this only adds
-    // that single unlock roll. Node 1 (T = 0) is unaffected: `T - 1` is below
-    // any cumulative count, so it accrues one pity per roll from the first roll.
-    const threshold = UNLOCK_ROLLS[node.id];
-    const accruing = node.locked ? 0 : Math.max(0, cum - Math.max(prevCum, threshold - 1));
+    // A node accrues one pity per roll while it is unlocked (enabled) and not
+    // locked. Unlocking is its own milestone that already grants the first pity,
+    // so the accrual here is simply the batch size - no unlock-threshold clamp.
+    const accruing = node.locked || !node.enabled ? 0 : rolls;
     const reached = node.pity + accruing;
 
-    if (golds.has(node.id)) {
+    // Only an enabled node can turn gold; ignore stray hits for disabled nodes
+    // (the form never offers them, but imports are untrusted).
+    if (node.enabled && golds.has(node.id)) {
       // Record how many rolls it took to reach this gold (for cell coloring),
       // then reset pity to 0 and mark it gold.
       goldPity[node.id] = reached;
-      return { ...node, enabled, tier: 'gold' as const, pity: 0 };
+      return { ...node, tier: 'gold' as const, pity: 0 };
     }
 
     if (accruing > 0) {
       // The node was actively re-rolled this segment without turning gold, so any
       // prior gold has been gambled away - clear the gold marker. (A node a player
       // wants to keep should be locked; a locked node never reaches this branch.)
-      return { ...node, enabled, tier: null, pity: reached };
+      return { ...node, tier: null, pity: reached };
     }
 
-    // Locked, disabled, or not yet active this segment: state is frozen, so a
-    // locked gold keeps its star into later rows.
-    return { ...node, enabled, pity: reached };
+    // Locked, disabled, or not active this segment: state is frozen, so a locked
+    // gold keeps its star into later rows.
+    return { ...node, pity: reached };
   });
 
   return { nodes, stones, goldPity: Object.keys(goldPity).length > 0 ? goldPity : undefined };
@@ -161,21 +162,37 @@ function applyLock(prevNodes: NodeSnapshot[], nodeId: NodeId, locked: boolean): 
 }
 
 /**
+ * Enable a node. The unlock roll counts as the node's first pity, so a freshly
+ * unlocked node reads pity 1; Misc (Node 5) has no pity and turns gold instead.
+ * Idempotent: re-unlocking an already-enabled node is a no-op (so we never reset
+ * a node's pity by accident). Unlocks are permanent.
+ */
+function applyUnlock(prevNodes: NodeSnapshot[], nodeId: NodeId): NodeSnapshot[] {
+  return prevNodes.map((node) => {
+    if (node.id !== nodeId || node.enabled) return { ...node };
+    if (node.id === AUTO_GOLD_NODE) {
+      return { ...node, enabled: true, tier: 'gold' as const, pity: 0 };
+    }
+    return { ...node, enabled: true, pity: 1 };
+  });
+}
+
+/**
  * Revert to a saved look. The user supplies gold + lock per enabled node (no
  * variant - this is a pity tracker). ALL pity resets to 0. Enabled status,
  * cumulative rolls, and cumulative stones are preserved (unlocks are permanent
  * and already-spent stones are not refunded).
  */
-function applyRevert(prevNodes: NodeSnapshot[], cum: number, input: Extract<MilestoneInput, { type: 'revert' }>): NodeSnapshot[] {
+function applyRevert(prevNodes: NodeSnapshot[], input: Extract<MilestoneInput, { type: 'revert' }>): NodeSnapshot[] {
   const byId = new Map(input.nodes.map((n) => [n.id, n]));
   return prevNodes.map((node) => {
-    const enabled = isNodeEnabled(node.id, cum);
+    // `enabled` is carried state (set by unlock milestones), not re-derived here.
     if (node.id === AUTO_GOLD_NODE) {
-      return { ...node, enabled, tier: enabled ? ('gold' as const) : null, pity: 0 };
+      return { ...node, tier: node.enabled ? ('gold' as const) : null, pity: 0 };
     }
     const r = byId.get(node.id);
-    if (!r) return { ...node, enabled, pity: 0 };
-    return { ...node, enabled, locked: r.locked, tier: r.gold ? ('gold' as const) : null, pity: 0 };
+    if (!r) return { ...node, pity: 0 };
+    return { ...node, locked: r.locked, tier: r.gold ? ('gold' as const) : null, pity: 0 };
   });
 }
 
@@ -199,18 +216,21 @@ export function replay(inputs: MilestoneInput[]): Milestone[] {
     switch (input.type) {
       case 'roll': {
         rolls = input.rolls;
-        const result = applyRoll(prevNodes, cumulativeRolls, rolls, input.goldHits);
+        const result = applyRoll(prevNodes, rolls, input.goldHits);
         nodes = result.nodes;
         stones = result.stones;
         goldPity = result.goldPity;
         cumulativeRolls += rolls;
         break;
       }
+      case 'unlock':
+        nodes = applyUnlock(prevNodes, input.nodeId);
+        break;
       case 'lock':
         nodes = applyLock(prevNodes, input.nodeId, input.locked);
         break;
       case 'revert':
-        nodes = applyRevert(prevNodes, cumulativeRolls, input);
+        nodes = applyRevert(prevNodes, input);
         break;
     }
 

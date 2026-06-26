@@ -20,21 +20,23 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 
 ## Architecture
 
-- `src/types/reforge.ts` - domain types. `goldHits` is `NodeId[]` (no variant); `Session` wraps a named `MilestoneInput[]`; `PersistedState` is v3 (`sessions` + `activeSessionId`).
-- `src/lib/constants.ts` - all game numbers. Change tuning here, never inline.
+- `src/types/reforge.ts` - domain types. `goldHits` is `NodeId[]` (no variant); the `unlock` milestone enables a node; `Session` wraps a named `MilestoneInput[]`; `PersistedState` is v4 (`sessions` + `activeSessionId`).
+- `src/lib/constants.ts` - all game numbers. Change tuning here, never inline. `LEGACY_UNLOCK_ROLLS` is migration-only (the real unlock totals vary per weapon, so unlocking is now a manual milestone); `INITIALLY_ENABLED_NODE_IDS` is just Node 1.
 - `src/lib/id.ts` - shared `uid()` (`crypto.randomUUID`) for session/milestone ids; used by storage and the hook.
 - `src/lib/engine.ts` - **pure, framework-free** logic. Put business logic here, not in components. (Session-agnostic: it replays one `MilestoneInput[]` and is unaffected by multi-session.)
-- `src/lib/storage.ts` - localStorage load/save, version-gated (v3), with in-memory fallback. Pure exported `coerceState` migrates v2 and repairs/validates v3.
+- `src/lib/migrate.ts` - **pure** `synthesizeUnlocks`: inserts `unlock` milestones into pre-manual-unlock inputs (v1/v2/v3 data and legacy export files) by splitting roll batches at the legacy thresholds. Used by `storage.ts` and `sessionIo.ts`.
+- `src/lib/storage.ts` - localStorage load/save, version-gated (v4), with in-memory fallback. Pure exported `coerceState` migrates v2 and v3 (synthesizing unlocks) and repairs/validates v4.
 - `src/lib/sessionIo.ts` - **pure** session JSON export/import: `serializeSession`, `parseSessionExport` (validates the file envelope), and strict `sanitizeMilestoneInputs`. The DOM glue (download/file-read) lives in `SessionBar`, not here.
 - `src/hooks/useReforgeSession.ts` - `useReducer` over `{ sessions, activeSessionId }`; milestone actions target the active session, session actions create/switch/rename/delete/import; derives `replay` via `useMemo`; persists.
 - `src/components/` - `SessionBar`, `CurrentStateBar`, `MilestoneTable`, `RollMilestoneForm`, `RevertMilestoneForm`, plus the two rails: `Legend` (static key for the table cues) and `GoldStats` (gold-luck pity distribution; renders the pure `goldPityDistribution`). `App` lays these out as three columns (legend left, tracker center, stats right) that stack on mobile.
 
 ## Invariants that are easy to get wrong
 
-- **Unlock pity**: the roll that crosses a node's unlock threshold `T` counts as its first pity, so a freshly unlocked node reads pity 1 (not 0). Use the `Math.max(prevCum, T - 1)` clamp in the accrual formula (once `prevCum >= T` the `T - 1` term is a no-op, so it only adds that single unlock roll; Node 1 at `T = 0` is unaffected).
-- **Locks are their own milestones**, so lock config is constant within a roll segment - that is why cost (`rolls * cost(lockedCount)`) and pity accrual are simple. Keep lock changes as separate milestones.
+- **Unlocks are manual milestones**: a node is enabled only by an `unlock` milestone (not by roll count - the totals vary per weapon). `applyUnlock` sets pity to 1 (the unlock roll is the first pity) and is idempotent; Misc (Node 5) turns gold with pity 0 instead. Because the first pity comes from the unlock, roll accrual is just `node.locked || !node.enabled ? 0 : rolls` (no threshold clamp). The UI gates unlocking to the next node in sequence (`nextUnlockableNodeId`); the engine itself stays order-permissive.
+- **Locks are their own milestones**, so lock config is constant within a roll segment - that is why cost (`rolls * cost(lockedCount)`) and pity accrual are simple. Keep lock (and unlock) changes as separate milestones.
+- **`enabled` is folding state**: it propagates through snapshots (set by `applyUnlock`, never re-derived from roll count). Preserve it via the `...node` spread in `applyRoll`/`applyRevert`; only an enabled node can accrue pity or be a gold hit.
 - **Re-rolling an UNLOCKED gold clears its gold** (gambled away); a **LOCKED** gold is frozen and keeps its star. See the `accruing > 0` branch in `applyRoll`.
-- **Node 5** is auto-gold once `cum >= 99`: never rolled, never locked, not counted in cost, no pity. Always special-case it (it never appears in `goldPity`, so it is naturally excluded from the gold-luck stats).
+- **Node 5** turns gold when unlocked: never rolled, never locked, not counted in cost, no pity. Always special-case it (it never appears in `goldPity`, so it is naturally excluded from the gold-luck stats).
 - **`goldPity`** records pity-at-gold per node for the gold-luck cell color, because the snapshot pity is 0 after a gold. Keep it derived in replay.
 - **Revert** zeroes all pity but keeps `enabled` (permanent unlocks), `cumulativeRolls`, and `cumulativeStones` (no stone refund).
 - **Only the latest milestone** can be edited or deleted.
@@ -46,7 +48,7 @@ Consequences: editing/deleting a milestone is just a list mutation + re-replay; 
 2. Add/extend Vitest tests in `src/lib/engine.test.ts` (this repo expects tests for logic you write). Cover boundaries (unlock crossings, locks, gold/re-roll, revert, Node 5).
 3. Keep detailed top-level and inline comments explaining the *why* (a repo-wide rule).
 4. **Update [docs/reforge-app.md](../../docs/reforge-app.md)** whenever behavior, data model, or UI changes.
-5. If you change the persisted schema, bump/guard `version` in `storage.ts` and add a migration in the pure `coerceState` (see the v2->v3 path and `normalizeInputs`) so existing sessions are not silently corrupted. Keep `coerceState` pure and covered by `storage.test.ts`.
+5. If you change the persisted schema, bump/guard `version` in `storage.ts` and add a migration in the pure `coerceState` (see the v2/v3 paths, `normalizeInputs`, and `synthesizeUnlocks`) so existing sessions are not silently corrupted. Keep `coerceState` pure and covered by `storage.test.ts`. Mirror file-format changes in `sessionIo.ts` (`EXPORT_VERSION`) and migrate older `exportVersion`s on import.
 
 ## Commands (run from repo root)
 

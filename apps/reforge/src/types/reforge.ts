@@ -22,8 +22,10 @@ export type Tier = 'blue' | 'purple' | 'gold';
  */
 export interface NodeSnapshot {
   id: NodeId;
-  // Whether the node has been unlocked yet. Derived from cumulative rolls vs the
-  // unlock threshold; once true it stays true (unlocks are permanent in-game).
+  // Whether the node has been unlocked yet. Flipped on by an `unlock` milestone
+  // (Node 1 starts enabled); once true it stays true (unlocks are permanent
+  // in-game). The unlock roll totals vary per weapon, so this is recorded
+  // manually rather than derived from a fixed threshold.
   enabled: boolean;
   // A locked node is not rolled: its pity is frozen and it raises the roll cost.
   locked: boolean;
@@ -50,12 +52,18 @@ export interface RevertNodeInput {
  * - `roll`: a batch of `rolls` since the previous milestone, ending in the ids
  *   of any nodes that turned gold (`goldHits`). Lock config is constant across
  *   the batch because lock changes are their own milestones.
+ * - `unlock`: enable a node. The unlock roll counts as the node's first pity, so
+ *   it starts at pity 1 (Misc turns gold). Unlocks are permanent, so there is no
+ *   `enabled` flag - recording the milestone *is* the unlock. The roll totals
+ *   that gate unlocking vary per weapon, so the player records it manually when
+ *   the node lights up in-game rather than the app deriving it from a threshold.
  * - `lock`: toggle one node's locked flag (0 rolls, 0 stones).
  * - `revert`: roll back to a saved look; the user supplies gold/lock per node and
  *   ALL pity resets to 0 (mirrors the in-game anti-stacking behavior).
  */
 export type MilestoneInput =
   | { id: string; type: 'roll'; rolls: number; goldHits: NodeId[] }
+  | { id: string; type: 'unlock'; nodeId: NodeId }
   | { id: string; type: 'lock'; nodeId: NodeId; locked: boolean }
   | { id: string; type: 'revert'; nodes: RevertNodeInput[] };
 
@@ -93,12 +101,14 @@ export interface Session {
 /**
  * Shape persisted to localStorage. Gated by `version` for safe migrations.
  *
- * v3 holds many named sessions plus the id of the active one. The earlier v2
- * shape (`{ version: 2, inputs }`) is a single unnamed session and is migrated
- * into one `Session` on load (see `storage.ts#coerceState`).
+ * v4 holds many named sessions plus the id of the active one, with explicit
+ * `unlock` milestones. Older shapes are migrated on load (see
+ * `storage.ts#coerceState`): v2 (`{ version: 2, inputs }`, a single unnamed
+ * session) and v3 (multi-session but pre-manual-unlock) both have their unlocks
+ * synthesized from the legacy thresholds.
  */
 export interface PersistedState {
-  version: 3;
+  version: 4;
   sessions: Session[];
   activeSessionId: string;
 }
@@ -108,12 +118,13 @@ export interface PersistedState {
  *
  * `exportVersion` is the file-format version, intentionally separate from
  * `PersistedState.version` so the on-disk and on-file schemas can evolve apart.
- * The session `id` is intentionally omitted - a fresh one is minted on import so
- * an imported session never collides with an existing one. See `lib/sessionIo.ts`.
+ * v2 carries explicit `unlock` milestones; v1 files are migrated on import. The
+ * session `id` is intentionally omitted - a fresh one is minted on import so an
+ * imported session never collides with an existing one. See `lib/sessionIo.ts`.
  */
 export interface SessionExport {
   type: 'wwm-reforge-session';
-  exportVersion: 1;
+  exportVersion: 2;
   exportedAt: string; // ISO timestamp, informational only
   name: string;
   inputs: MilestoneInput[];

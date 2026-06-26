@@ -22,8 +22,16 @@ export const NODE_DESCRIPTIONS: Record<NodeId, string> = {
   5: 'Auto-gold once unlocked; follows the other nodes',
 };
 
-// Total rolls required before each node is enabled.
-export const UNLOCK_ROLLS: Record<NodeId, number> = {
+// Nodes that are unlocked from the very start of a session. Only the Color node
+// (Node 1) is available before any rolls; the rest unlock via `unlock` milestones.
+export const INITIALLY_ENABLED_NODE_IDS: NodeId[] = [1];
+
+// Legacy per-node unlock thresholds (total rolls). These are NO LONGER used for
+// live behavior: we learned the totals differ per weapon, so unlocking is now a
+// manual milestone. Kept solely to migrate pre-manual sessions/exports - we
+// synthesize `unlock` milestones where a session's rolls crossed these totals.
+// See lib/migrate.ts.
+export const LEGACY_UNLOCK_ROLLS: Record<NodeId, number> = {
   1: 0,
   2: 24,
   3: 40,

@@ -20,11 +20,13 @@
 - Each node has its own separate pity tracking system. Each roll will increase the pity tracking of each node by 1.
 - The hard pity to get gold value of a node is 90. However, based on our statistic, we will usually get gold value for a node when pity for that node reaches around 30-40.
 - Pity for a node will be reset back to 0 after it gets gold value.
-- Initially, only Node 1 is enabled. Other nodes will be sequentially unlocked as you perform more and more rolls
-  - Node 2: Enabled after 24 rolls
-  - Node 3: Enabled after 16 more rolls (Total 40 rolls)
-  - Node 4: Enabled after 30 more rolls (Total 70 rolls)
-  - Node 5: Enabled after 29 more rolls (Total 99 rolls)
+- Initially, only Node 1 is enabled. Other nodes are unlocked sequentially (Node 2, then 3, then 4, then 5) as you perform more and more rolls.
+  - The total rolls needed to unlock each subsequent node **vary per weapon skin** - they are NOT universal. The values below were the originally-observed totals for one skin and are kept only as a rough reference:
+    - Node 2: ~24 rolls
+    - Node 3: ~40 total rolls
+    - Node 4: ~70 total rolls
+    - Node 5: ~99 total rolls
+  - Because the totals differ per weapon, the tracker does not assume them: the player records an unlock manually when a node lights up in-game (see [reforge-app.md](reforge-app.md)).
 - Pity of a node will only be tracked after it's enabled.
 - You can always lock an enabled node so that a roll will not randomize its value. Once a node is locked, a roll will NOT increase its pity. If the node is unlocked again afterwards, the pity will be increased normally again after each roll. This is how players can keep the gold value of a node. It's nearly impossible to roll 4 gold values at once in 1 single roll.
 - Cost of each roll varies based on number of locked nodes:

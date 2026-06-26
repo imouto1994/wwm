@@ -14,6 +14,7 @@ describe('serializeSession <-> parseSessionExport', () => {
       name: 'My Session',
       inputs: [
         { id: 'a', type: 'roll', rolls: 20, goldHits: [1] },
+        { id: 'd', type: 'unlock', nodeId: 2 },
         { id: 'b', type: 'lock', nodeId: 1, locked: true },
         { id: 'c', type: 'revert', nodes: [{ id: 1, gold: true, locked: false }] },
       ],
@@ -52,8 +53,25 @@ describe('parseSessionExport - rejections', () => {
     expect(parseSessionExport(JSON.stringify({ exportVersion: 1, name: 'x', inputs: [] })).ok).toBe(false);
   });
 
-  it('rejects an unsupported export version', () => {
-    expect(parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, exportVersion: 2, name: 'x', inputs: [] })).ok).toBe(false);
+  it('rejects an unsupported export version (newer than we understand, or not a number)', () => {
+    expect(parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, exportVersion: 3, name: 'x', inputs: [] })).ok).toBe(false);
+    expect(parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, exportVersion: 0, name: 'x', inputs: [] })).ok).toBe(false);
+    expect(parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, name: 'x', inputs: [] })).ok).toBe(false);
+  });
+});
+
+describe('parseSessionExport - version migration', () => {
+  it('accepts a current (v2) file without synthesizing unlocks', () => {
+    const r = parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, exportVersion: 2, name: 'new', inputs: [{ type: 'roll', rolls: 30, goldHits: [] }] }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.inputs.map((i) => i.type)).toEqual(['roll']);
+  });
+
+  it('accepts a legacy (v1) file and synthesizes its missing unlocks', () => {
+    const r = parseSessionExport(JSON.stringify({ type: EXPORT_TYPE, exportVersion: 1, name: 'old', inputs: [{ type: 'roll', rolls: 30, goldHits: [] }] }));
+    expect(r.ok).toBe(true);
+    // 30 rolls crossed Node 2's legacy threshold (24), so it is split around an unlock.
+    if (r.ok) expect(r.inputs.map((i) => i.type)).toEqual(['roll', 'unlock', 'roll']);
   });
 });
 
@@ -101,6 +119,17 @@ describe('sanitizeMilestoneInputs', () => {
       { type: 'lock', nodeId: 2, locked: 'yes' },
     ]);
     expect(out).toHaveLength(0);
+  });
+
+  it('keeps unlock milestones (including Node 5) and drops ones with a bad node id', () => {
+    const out = sanitizeMilestoneInputs([
+      { type: 'unlock', nodeId: 2 },
+      { type: 'unlock', nodeId: 5 }, // Misc is unlockable, unlike lock/revert
+      { type: 'unlock', nodeId: 9 },
+      { type: 'unlock', nodeId: 'x' },
+      { type: 'unlock' },
+    ]);
+    expect(out.map((i) => (i.type === 'unlock' ? i.nodeId : null))).toEqual([2, 5]);
   });
 
   it('filters revert nodes to valid rollable entries', () => {

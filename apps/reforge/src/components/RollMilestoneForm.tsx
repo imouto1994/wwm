@@ -1,15 +1,15 @@
-import { NODE_LABELS, UNLOCK_ROLLS } from '@/lib/constants';
-import { lockedRollableCount, rollCost, rollableAfter } from '@/lib/engine';
+import { NODE_LABELS } from '@/lib/constants';
+import { lockedRollableCount, rollCost, rollableNodes } from '@/lib/engine';
 import type { NodeId, NodeSnapshot } from '@/types/reforge';
 /**
  * Form to record a roll milestone: how many rolls since the last milestone and
  * which nodes turned gold. Doubles as the edit form for the latest roll
  * milestone via `initial`.
  *
- * The list of tickable nodes is computed from the entered roll count: any
- * rollable, unlocked node that is enabled by the END of the batch is offered -
- * so if the batch is large enough to unlock Node 2/3/4, those appear too and can
- * be marked gold. No variant is asked for; this is a pure pity tracker.
+ * Only nodes that are already unlocked (and not locked) can be marked gold. A
+ * node must be unlocked from its chip first - unlocking is its own milestone -
+ * so a node that unlocked during these rolls is recorded as a separate unlock
+ * before its golds. No variant is asked for; this is a pure pity tracker.
  */
 import { Dices } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -18,14 +18,12 @@ interface Props {
   // Node state going into this segment (current state, or the state before the
   // latest milestone when editing).
   nodes: NodeSnapshot[];
-  // Cumulative rolls going into this segment (drives mid-batch unlock detection).
-  baseRolls: number;
   initial?: { rolls: number; goldHits: NodeId[] };
   onSubmit: (rolls: number, goldHits: NodeId[]) => void;
   onCancel: () => void;
 }
 
-export function RollMilestoneForm({ nodes, baseRolls, initial, onSubmit, onCancel }: Props) {
+export function RollMilestoneForm({ nodes, initial, onSubmit, onCancel }: Props) {
   const cost = rollCost(lockedRollableCount(nodes));
   const lockedLabels = nodes.filter((n) => n.locked).map((n) => NODE_LABELS[n.id]);
 
@@ -41,8 +39,8 @@ export function RollMilestoneForm({ nodes, baseRolls, initial, onSubmit, onCance
   const validRolls = Number.isInteger(rollsNum) && rollsNum > 0;
   const stonesPreview = validRolls ? rollsNum * cost : 0;
 
-  // Tickable nodes depend on the entered rolls (so newly-unlocked nodes appear).
-  const tickable = useMemo(() => rollableAfter(nodes, baseRolls + (validRolls ? rollsNum : 0)), [nodes, baseRolls, rollsNum, validRolls]);
+  // Only already-unlocked, unlocked-not-locked rollable nodes can turn gold.
+  const tickable = useMemo(() => rollableNodes(nodes), [nodes]);
 
   function handleSubmit() {
     if (!validRolls) {
@@ -90,25 +88,21 @@ export function RollMilestoneForm({ nodes, baseRolls, initial, onSubmit, onCance
       {tickable.length > 0 ? (
         <div className='flex flex-col gap-2'>
           <span className='text-xs text-muted'>Tick any node that turned gold during these rolls:</span>
-          {tickable.map((id) => {
-            // A node enabled only because of the rolls just entered is highlighted.
-            const unlocksThisBatch = baseRolls < UNLOCK_ROLLS[id];
-            return (
-              <label key={id} className='flex items-center gap-2 rounded-lg border border-border bg-bg/40 px-3 py-2 text-sm'>
-                <input
-                  type='checkbox'
-                  checked={!!gold[id]}
-                  onChange={(e) => setGold((g) => ({ ...g, [id]: e.target.checked }))}
-                  className='size-4 accent-[var(--color-gold)]'
-                />
-                <span className='font-medium'>{NODE_LABELS[id]}</span>
-                {unlocksThisBatch && <span className='text-xs text-muted'>(unlocks at {UNLOCK_ROLLS[id]} rolls)</span>}
-              </label>
-            );
-          })}
+          {tickable.map((id) => (
+            <label key={id} className='flex items-center gap-2 rounded-lg border border-border bg-bg/40 px-3 py-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={!!gold[id]}
+                onChange={(e) => setGold((g) => ({ ...g, [id]: e.target.checked }))}
+                className='size-4 accent-[var(--color-gold)]'
+              />
+              <span className='font-medium'>{NODE_LABELS[id]}</span>
+            </label>
+          ))}
+          <p className='text-xs text-muted'>A node unlocked during these rolls? Unlock it from its chip first, then record its gold here.</p>
         </div>
       ) : (
-        <p className='text-xs text-muted'>No rollable nodes for this segment yet (all enabled nodes are locked).</p>
+        <p className='text-xs text-muted'>No rollable nodes yet. Unlock a node from its chip, or all unlocked nodes are locked.</p>
       )}
 
       {error && <p className='text-sm text-red'>{error}</p>}

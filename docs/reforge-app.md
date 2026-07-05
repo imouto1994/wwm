@@ -8,18 +8,18 @@
 
 ### 1.1 Vision
 
-A fast, client-side single-page app that lets *Where Winds Meet* players **track the pity of a weapon-skin reforge session**. Reforge is a gacha system with five separate nodes, each with its own pity counter, lock state, and per-roll cost. Rather than logging every single roll, the player records a **milestone** whenever something notable happens — a node turns gold, a node is locked/unlocked, or the look is reverted — entering how many rolls happened since the last milestone. The app derives a per-node **status table** from those milestones: each node's pity, tier, lock state, and the running roll/stone totals.
+A fast, client-side single-page app that lets _Where Winds Meet_ players **track the pity of a weapon-skin reforge session**. Reforge is a gacha system with five separate nodes, each with its own pity counter, lock state, and per-roll cost. Rather than logging every single roll, the player records a **milestone** whenever something notable happens — a node turns gold, a node is locked/unlocked, or the look is reverted — entering how many rolls happened since the last milestone. The app derives a per-node **status table** from those milestones: each node's pity, tier, lock state, and the running roll/stone totals.
 
 This is the second app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md). It is intentionally a **pure tracker** — it does not simulate rolls or advise strategy; the player performs rolls in-game and records the milestones.
 
 ### 1.2 Goals
 
-| # | Goal | Success Metric |
-|---|------|----------------|
-| 1 | Accurately track per-node pity across a session | Pity counters match in-game state with minimal input |
-| 2 | Keep input low-effort and miss-free | One milestone per gold event; many rolls batched at once |
-| 3 | Persist sessions with zero setup | State survives reloads via localStorage; no account needed |
-| 4 | Match the Boss Guide's wuxia aesthetic | Shared dark ink-wash palette |
+| #   | Goal                                            | Success Metric                                             |
+| --- | ----------------------------------------------- | ---------------------------------------------------------- |
+| 1   | Accurately track per-node pity across a session | Pity counters match in-game state with minimal input       |
+| 2   | Keep input low-effort and miss-free             | One milestone per gold event; many rolls batched at once   |
+| 3   | Persist sessions with zero setup                | State survives reloads via localStorage; no account needed |
+| 4   | Match the Boss Guide's wuxia aesthetic          | Shared dark ink-wash palette                               |
 
 ### 1.3 Target Audience
 
@@ -36,18 +36,18 @@ Full source: [docs/reforge.md](reforge.md). The rules the app models:
 
 A weapon skin has **5 nodes**:
 
-| Node | Name | Notes |
-|------|------|-------|
-| 1 | Color Node | ~10 gold variances: 2 align with Set A / Set B, plus ~8 unique colors |
-| 2 | Part 1 | 2 gold variances (Set A / Set B) + purple + blue |
-| 3 | Part 2 | 2 gold variances (Set A / Set B) + purple + blue |
-| 4 | Part 3 | 2 gold variances (Set A / Set B) + purple + blue |
-| 5 | Misc | **Special** — in-game "Highlight"; see 2.5 |
+| Node | Name   | Notes                                                                 |
+| ---- | ------ | --------------------------------------------------------------------- |
+| 1    | Node 1 | ~10 gold variances: 2 align with Set A / Set B, plus ~8 unique colors |
+| 2    | Node 2 | 2 gold variances (Set A / Set B) + purple + blue                      |
+| 3    | Node 3 | 2 gold variances (Set A / Set B) + purple + blue                      |
+| 4    | Node 4 | 2 gold variances (Set A / Set B) + purple + blue                      |
+| 5    | Node 5 | **Special** — in-game "Highlight"; see 2.5                            |
 
 ### 2.2 Tiers and Sets
 
 - Three tiers per node: **Gold** (best), **Purple** (average), **Blue** (low).
-- Gold has two "sets" per skin: **Set A** and **Set B**. The ideal look is all five nodes gold in the *same* set.
+- Gold has two "sets" per skin: **Set A** and **Set B**. The ideal look is all five nodes gold in the _same_ set.
 - Node 1 additionally has ~8 unique gold colors outside the two sets (for players who want a custom color).
 
 > The tracker intentionally does **not** record which set/variant a gold lands on — only that a node is gold. Variant is cosmetic and irrelevant to pity, so it is omitted to keep input minimal.
@@ -79,11 +79,11 @@ The unlock roll counts as the node's first pity, so a freshly unlocked node read
 - Cost scales with the number of locked nodes. Because only nodes 1-4 are rollable, the maximum while still rolling is 3 locked:
 
 | Locked nodes | Stones per roll |
-|--------------|-----------------|
-| 0 | 1 |
-| 1 | 2 |
-| 2 | 5 |
-| 3 | 10 |
+| ------------ | --------------- |
+| 0            | 1               |
+| 1            | 2               |
+| 2            | 5               |
+| 3            | 10              |
 
 ### 2.7 Color Node constraint (informational)
 
@@ -122,57 +122,77 @@ Everything in the tracker column reflects the **active** session; switching sess
 
 ## 4. Data Model
 
-Each session is an ordered list of milestone **inputs**; its table is *derived* by replaying them (nothing computed is persisted). The app holds many named sessions and remembers which one is active. Defined in [apps/reforge/src/types/reforge.ts](../apps/reforge/src/types/reforge.ts):
+Each session is an ordered list of milestone **inputs**; its table is _derived_ by replaying them (nothing computed is persisted). The app holds many named sessions and remembers which one is active. Defined in [apps/reforge/src/types/reforge.ts](../apps/reforge/src/types/reforge.ts):
 
 ```typescript
 type NodeId = 1 | 2 | 3 | 4 | 5;
-type Tier = 'blue' | 'purple' | 'gold'; // in practice only 'gold' or null is tracked
+type Tier = "blue" | "purple" | "gold"; // in practice only 'gold' or null is tracked
 
 // Derived per-node state (produced by replay; only authored via a revert input).
 interface NodeSnapshot {
   id: NodeId;
-  enabled: boolean;       // unlocked yet? derived from cumulative rolls (permanent)
-  locked: boolean;        // frozen pity + raises roll cost
-  pity: number;           // rolls toward next gold; 0 on gold; always 0 for Node 5
-  tier: Tier | null;      // 'gold' (held by a lock) or null; Node 5 is gold once enabled
+  enabled: boolean; // unlocked yet? derived from cumulative rolls (permanent)
+  locked: boolean; // frozen pity + raises roll cost
+  pity: number; // rolls toward next gold; 0 on gold; always 0 for Node 5
+  tier: Tier | null; // 'gold' (held by a lock) or null; Node 5 is gold once enabled
 }
 
-interface RevertNodeInput { id: NodeId; gold: boolean; locked: boolean }
+interface RevertNodeInput {
+  id: NodeId;
+  gold: boolean;
+  locked: boolean;
+}
 
 // The user-authored unit; everything else is derived from an ordered array.
 // A roll's goldHits is just the ids of the nodes that turned gold (no variant -
 // this is a pure pity tracker). An `unlock` enables a node (pity 1; Misc gold) -
 // recorded manually because the unlock roll totals vary per weapon.
 type MilestoneInput =
-  | { id: string; type: 'roll'; rolls: number; goldHits: NodeId[] }
-  | { id: string; type: 'unlock'; nodeId: NodeId }
-  | { id: string; type: 'lock'; nodeId: NodeId; locked: boolean }
-  | { id: string; type: 'revert'; nodes: RevertNodeInput[] };
+  | { id: string; type: "roll"; rolls: number; goldHits: NodeId[] }
+  | { id: string; type: "unlock"; nodeId: NodeId }
+  | { id: string; type: "lock"; nodeId: NodeId; locked: boolean }
+  | { id: string; type: "revert"; nodes: RevertNodeInput[] };
 
 // A derived row: input + running totals + the full snapshot after applying it.
 interface Milestone {
   input: MilestoneInput;
   index: number;
-  rolls: number; cumulativeRolls: number;
-  stones: number; cumulativeStones: number;
+  rolls: number;
+  cumulativeRolls: number;
+  stones: number;
+  cumulativeStones: number;
   nodes: NodeSnapshot[];
   label: string;
   goldPity?: Partial<Record<NodeId, number>>; // pity-at-gold per node golded here
 }
 
 // A named session is just its ordered inputs; its table is derived on demand.
-interface Session { id: string; name: string; inputs: MilestoneInput[] }
+interface Session {
+  id: string;
+  name: string;
+  inputs: MilestoneInput[];
+}
 
 // v4 holds many named sessions plus the active one's id. Older shapes are
 // migrated on load - v2 (single `inputs` array) and v3 (pre-manual-unlock) both
 // have their unlock milestones synthesized. See storage.ts#coerceState.
-interface PersistedState { version: 4; sessions: Session[]; activeSessionId: string }
+interface PersistedState {
+  version: 4;
+  sessions: Session[];
+  activeSessionId: string;
+}
 
 // JSON envelope for a single exported/imported session (one file = one session).
 // `exportVersion` is the file-format version, separate from PersistedState.version;
 // v2 carries explicit unlocks (v1 files are migrated on import); the session id is
 // omitted and minted fresh on import. See lib/sessionIo.ts.
-interface SessionExport { type: 'wwm-reforge-session'; exportVersion: 2; exportedAt: string; name: string; inputs: MilestoneInput[] }
+interface SessionExport {
+  type: "wwm-reforge-session";
+  exportVersion: 2;
+  exportedAt: string;
+  name: string;
+  inputs: MilestoneInput[];
+}
 ```
 
 `goldPity` records how many rolls each node took to gold in that milestone (its pity just before the reset). The snapshot pity is 0 afterward, so `goldPity` is what drives the gold-luck cell color.
@@ -209,8 +229,8 @@ Since unlocking is its own milestone (which already grants the first pity), a ro
 
 ```typescript
 const accruing = node.locked || !node.enabled ? 0 : rolls;
-const reached = node.pity + accruing;   // pity-at-gold when this node is a gold hit
-node.pity = isGoldHit ? 0 : reached;    // reset on gold (only enabled nodes can gold)
+const reached = node.pity + accruing; // pity-at-gold when this node is a gold hit
+node.pity = isGoldHit ? 0 : reached; // reset on gold (only enabled nodes can gold)
 ```
 
 `applyUnlock` enables a node and sets its pity to 1 (the unlock roll), or marks Misc gold with pity 0. It is idempotent, so re-unlocking an already-enabled node never resets its pity.
@@ -233,7 +253,7 @@ Node 5 turns gold the moment it is unlocked (its `unlock` milestone sets `tier: 
 
 ### 5.7 Gold-luck distribution
 
-`goldPityDistribution(milestones)` pools every recorded gold hit (each milestone's `goldPity`, across the rollable nodes — Node 5 has no pity and is excluded) into fixed `GOLD_BUCKET_SIZE`-wide ranges spanning `1..HARD_PITY` (e.g. `1-5, 6-10, … 86-90`) and returns the buckets plus the total gold count. Because it reads `goldPity`, it counts every gold *event* in the session (even ones later re-rolled away) and re-derives on edit/delete. The `GoldStats` rail renders it as colored bars (the same luck colors as the table) across the full set of pity ranges, including empty ones, so the scale stays stable.
+`goldPityDistribution(milestones)` pools every recorded gold hit (each milestone's `goldPity`, across the rollable nodes — Node 5 has no pity and is excluded) into fixed `GOLD_BUCKET_SIZE`-wide ranges spanning `1..HARD_PITY` (e.g. `1-5, 6-10, … 86-90`) and returns the buckets plus the total gold count. Because it reads `goldPity`, it counts every gold _event_ in the session (even ones later re-rolled away) and re-derives on edit/delete. The `GoldStats` rail renders it as colored bars (the same luck colors as the table) across the full set of pity ranges, including empty ones, so the scale stays stable.
 
 ### 5.8 Notes
 
@@ -249,7 +269,7 @@ Node 5 turns gold the moment it is unlocked (its `unlock` milestone sets `tier: 
 
 - **SessionBar** — switches and manages sessions: a native `<select>` of all sessions (the accessible, mobile-friendly choice), a **New** button, and a kebab manage menu with **Rename** (inline text field; trims, blocks empty, Enter saves / Escape cancels), **Export** (downloads the active session as JSON), **Import** (reads a JSON file and adds it as a new session), and **Delete** (confirm). The menu closes on outside-click / Escape and its popover sits above the table's sticky cells. Deleting the active session selects a neighbor; deleting the last one creates a fresh default. Export/import logic lives in the pure [sessionIo.ts](../apps/reforge/src/lib/sessionIo.ts) (validates the file envelope and strictly sanitizes inputs); the DOM glue (download/file-read) is the only non-pure part.
 - **CurrentStateBar** — session totals, roll cost, a per-node chip row (pity, a gold border + star when the node is gold instead of a tier word, inline lock toggle, the about-to-pop pulse), and the action buttons (Add Rolls, Restore Plan, Reset — Reset clears the **active** session's milestones, distinct from SessionBar's Delete). A locked-out (not-yet-unlocked) node's chip shows an **Unlock** button, but only for the next node in sequence (via `nextUnlockableNodeId`); later nodes read "after &lt;previous node&gt;". Unlocking Misc turns it gold.
-- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. A gold-hit roll's Milestone label shows each node name followed by a gold star icon (e.g. "Color *, Part 1 *") rather than the longer "-> Gold" text. Edit/Delete appear on the latest row only (Edit hidden for lock **and unlock** rows, which carry no roll/revert data). Horizontally scrollable with a sticky `#` column on mobile.
+- **MilestoneTable** — the milestone log: a Start baseline row plus one row per milestone. Columns are the 5 nodes (each cell: tier marker + pity, lock icon; Node 5 shows gold once enabled) and the roll/stone totals. A gold-hit roll's Milestone label shows each node name followed by a gold star icon (e.g. "Node 1 _, Node 2 _") rather than the longer "-> Gold" text. Edit/Delete appear on the latest row only (Edit hidden for lock **and unlock** rows, which carry no roll/revert data). Horizontally scrollable with a sticky `#` column on mobile.
 - **RollMilestoneForm** — `rolls >= 1`, plus a "turned gold" checkbox (no variant) for each rollable node that is already **unlocked** and not locked (via `rollableNodes`). A node must be unlocked from its chip first, so the form notes that and offers no future-unlock projection. Shows the current lock config read-only. Doubles as the edit form for the latest roll milestone.
 - **RevertMilestoneForm** — per enabled node a gold + lock toggle (no variant); all pity resets to 0. Surfaced as the "Restore Plan" action (the in-game save/restore).
 - **Legend** — a static left rail keying the table's cues (gold-luck colors with their thresholds, the about-to-pop pulse, and the star / lock / Misc-auto-gold marks). Reuses the same constants and `LUCK_BG` classes as the table so it never drifts.
@@ -275,16 +295,16 @@ State flows through `useReforgeSession` ([apps/reforge/src/hooks/useReforgeSessi
 
 ### 7.1 Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Build tool | Vite 8 |
-| UI | React 18 + TypeScript 5 |
-| Styling | Tailwind CSS 4 (`@tailwindcss/vite`) |
-| Icons | lucide-react |
-| Lint/format | Biome (shared root config) |
-| Testing | Vitest |
-| Persistence | `localStorage` (in-memory fallback) |
-| Package manager | pnpm (workspace) |
+| Layer           | Technology                           |
+| --------------- | ------------------------------------ |
+| Build tool      | Vite 8                               |
+| UI              | React 18 + TypeScript 5              |
+| Styling         | Tailwind CSS 4 (`@tailwindcss/vite`) |
+| Icons           | lucide-react                         |
+| Lint/format     | Biome (shared root config)           |
+| Testing         | Vitest                               |
+| Persistence     | `localStorage` (in-memory fallback)  |
+| Package manager | pnpm (workspace)                     |
 
 No router, no backend, no CMS — a pure client-side SPA.
 
@@ -339,15 +359,15 @@ This guarantees there is always at least one session with a resolvable `activeSe
 
 The reforge app deploys to **Vercel** (the Boss Guide stays on GitHub Pages).
 
-| Setting | Value |
-|---------|-------|
-| Root Directory | `apps/reforge` |
-| Framework preset | Vite (auto-detected) |
-| Build command | `vite build` (via `pnpm build`) |
-| Output directory | `dist` |
-| Install | pnpm workspace install at repo root (keep "Include files outside the root directory" enabled) |
-| Node version | from root `package.json` `engines.node` = `24.x` (Vercel ignores `.nvmrc`); can also be set in the Vercel dashboard |
-| Package manager | detected from the root lockfile / `packageManager` field |
+| Setting          | Value                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Root Directory   | `apps/reforge`                                                                                                      |
+| Framework preset | Vite (auto-detected)                                                                                                |
+| Build command    | `vite build` (via `pnpm build`)                                                                                     |
+| Output directory | `dist`                                                                                                              |
+| Install          | pnpm workspace install at repo root (keep "Include files outside the root directory" enabled)                       |
+| Node version     | from root `package.json` `engines.node` = `24.x` (Vercel ignores `.nvmrc`); can also be set in the Vercel dashboard |
+| Package manager  | detected from the root lockfile / `packageManager` field                                                            |
 
 Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Vercel serves the app at its own domain root; [apps/reforge/vercel.json](../apps/reforge/vercel.json) adds an SPA rewrite (`/(.*)` → `/index.html`) for deep-link safety.
 
@@ -394,13 +414,13 @@ Auto-deploys on push to `main`; preview deploys on PRs. `base: '/'` because Verc
 
 ## 11. Open Questions
 
-| # | Question | Impact |
-|---|----------|--------|
-| 1 | Is Node 5 ever lockable / counted in roll cost? (Assumed no.) | If yes, a 4-locked stone cost is needed |
-| 2 | Are the soft-pity (~30-40) numbers stable across skins? | Constants may need to be configurable per skin (unlock totals are already handled via manual unlock milestones) |
+| #   | Question                                                      | Impact                                                                                                          |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1   | Is Node 5 ever lockable / counted in roll cost? (Assumed no.) | If yes, a 4-locked stone cost is needed                                                                         |
+| 2   | Are the soft-pity (~30-40) numbers stable across skins?       | Constants may need to be configurable per skin (unlock totals are already handled via manual unlock milestones) |
 
 ---
 
 ## 12. Legal / Copyright
 
-*Where Winds Meet* is developed by Everstone Studios. This is an **unofficial fan tool**, not affiliated with or endorsed by Everstone Studios. No game assets or data-mined files are included.
+_Where Winds Meet_ is developed by Everstone Studios. This is an **unofficial fan tool**, not affiliated with or endorsed by Everstone Studios. No game assets or data-mined files are included.

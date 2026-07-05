@@ -18,8 +18,13 @@ import {
   ROLLABLE_NODE_IDS,
   ROLL_COST_BY_LOCKED,
   SOON_PITY,
-} from '@/lib/constants';
-import type { Milestone, MilestoneInput, NodeId, NodeSnapshot } from '@/types/reforge';
+} from "@/lib/constants";
+import type {
+  Milestone,
+  MilestoneInput,
+  NodeId,
+  NodeSnapshot,
+} from "@/types/reforge";
 
 // Opening state of a fresh session: only Node 1 is enabled, nothing locked,
 // no pity, no results yet. Other nodes unlock via `unlock` milestones.
@@ -35,7 +40,9 @@ export function createInitialNodes(): NodeSnapshot[] {
 
 // Locked rollable nodes drive the roll cost. Node 5 is auto-gold and never counted.
 export function lockedRollableCount(nodes: NodeSnapshot[]): number {
-  return nodes.filter((n) => ROLLABLE_NODE_IDS.includes(n.id) && n.enabled && n.locked).length;
+  return nodes.filter(
+    (n) => ROLLABLE_NODE_IDS.includes(n.id) && n.enabled && n.locked
+  ).length;
 }
 
 // Stone cost of one roll given how many rollable nodes are locked. The table
@@ -53,11 +60,13 @@ export function nextRollCost(nodes: NodeSnapshot[]): number {
 // and not locked. Unlocking is its own milestone now, so this no longer projects
 // future unlocks - a node must be unlocked before its golds can be recorded.
 export function rollableNodes(nodes: NodeSnapshot[]): NodeId[] {
-  return nodes.filter((n) => ROLLABLE_NODE_IDS.includes(n.id) && n.enabled && !n.locked).map((n) => n.id);
+  return nodes
+    .filter((n) => ROLLABLE_NODE_IDS.includes(n.id) && n.enabled && !n.locked)
+    .map((n) => n.id);
 }
 
 // The next node the player can unlock. In-game nodes unlock strictly in order
-// (Part 1 -> Part 2 -> Part 3 -> Misc), so the UI only offers the lowest-id
+// (Node 2 -> Node 3 -> Node 4 -> Node 5), so the UI only offers the lowest-id
 // not-yet-enabled node. Returns null once everything is unlocked. The engine
 // itself stays permissive; this only drives the UI's sequential gating.
 export function nextUnlockableNodeId(nodes: NodeSnapshot[]): NodeId | null {
@@ -71,35 +80,43 @@ export function lockableNodes(nodes: NodeSnapshot[]): NodeSnapshot[] {
 }
 
 // Maps a pity-at-gold value to a luck color for the cell background.
-export function goldPityColor(pity: number): 'green' | 'yellow' | 'red' {
+export function goldPityColor(pity: number): "green" | "yellow" | "red" {
   // Inclusive upper bounds (<= 30 green, <= 50 yellow, > 50 red) so the bands
   // line up with the size-5 GoldStats buckets that break at 30 and 50.
-  if (pity <= GOLD_LUCK.green) return 'green';
-  if (pity <= GOLD_LUCK.yellow) return 'yellow';
-  return 'red';
+  if (pity <= GOLD_LUCK.green) return "green";
+  if (pity <= GOLD_LUCK.yellow) return "yellow";
+  return "red";
 }
 
 // Whether a node is "about to pop": actively rolling (enabled, unlocked,
 // not yet gold) and at/over the soft-pity floor. Drives the current-state pulse.
 export function isSoon(node: NodeSnapshot): boolean {
-  return node.id !== AUTO_GOLD_NODE && node.enabled && !node.locked && node.tier !== 'gold' && node.pity >= SOON_PITY;
+  return (
+    node.id !== AUTO_GOLD_NODE &&
+    node.enabled &&
+    !node.locked &&
+    node.tier !== "gold" &&
+    node.pity >= SOON_PITY
+  );
 }
 
 // Human-readable summary shown in the table's Note column.
 function labelFor(input: MilestoneInput): string {
   switch (input.type) {
-    case 'roll': {
+    case "roll": {
       if (input.goldHits.length === 0) {
-        return `${input.rolls} roll${input.rolls === 1 ? '' : 's'}`;
+        return `${input.rolls} roll${input.rolls === 1 ? "" : "s"}`;
       }
-      return input.goldHits.map((id) => `${NODE_LABELS[id]} -> Gold`).join(', ');
+      return input.goldHits
+        .map((id) => `${NODE_LABELS[id]} -> Gold`)
+        .join(", ");
     }
-    case 'unlock':
+    case "unlock":
       return `Unlock ${NODE_LABELS[input.nodeId]}`;
-    case 'lock':
-      return `${input.locked ? 'Lock' : 'Unlock'} ${NODE_LABELS[input.nodeId]}`;
-    case 'revert':
-      return 'Restore';
+    case "lock":
+      return `${input.locked ? "Lock" : "Unlock"} ${NODE_LABELS[input.nodeId]}`;
+    case "revert":
+      return "Restore";
   }
 }
 
@@ -114,7 +131,11 @@ interface RollResult {
  * previous node state. Lock config is constant across the batch (lock changes
  * are their own milestones), so the cost is simply `rolls * cost(lockedCount)`.
  */
-function applyRoll(prevNodes: NodeSnapshot[], rolls: number, goldHits: NodeId[]): RollResult {
+function applyRoll(
+  prevNodes: NodeSnapshot[],
+  rolls: number,
+  goldHits: NodeId[]
+): RollResult {
   const stones = rolls * rollCost(lockedRollableCount(prevNodes));
   const golds = new Set<NodeId>(goldHits);
   const goldPity: Partial<Record<NodeId, number>> = {};
@@ -123,7 +144,11 @@ function applyRoll(prevNodes: NodeSnapshot[], rolls: number, goldHits: NodeId[])
     // Node 5 is auto-gold while enabled; it is never rolled and has no pity. Its
     // `enabled` is set by an unlock milestone, so leave it untouched here.
     if (node.id === AUTO_GOLD_NODE) {
-      return { ...node, tier: node.enabled ? ('gold' as const) : null, pity: 0 };
+      return {
+        ...node,
+        tier: node.enabled ? ("gold" as const) : null,
+        pity: 0,
+      };
     }
 
     // A node accrues one pity per roll while it is unlocked (enabled) and not
@@ -138,7 +163,7 @@ function applyRoll(prevNodes: NodeSnapshot[], rolls: number, goldHits: NodeId[])
       // Record how many rolls it took to reach this gold (for cell coloring),
       // then reset pity to 0 and mark it gold.
       goldPity[node.id] = reached;
-      return { ...node, tier: 'gold' as const, pity: 0 };
+      return { ...node, tier: "gold" as const, pity: 0 };
     }
 
     if (accruing > 0) {
@@ -153,12 +178,22 @@ function applyRoll(prevNodes: NodeSnapshot[], rolls: number, goldHits: NodeId[])
     return { ...node, pity: reached };
   });
 
-  return { nodes, stones, goldPity: Object.keys(goldPity).length > 0 ? goldPity : undefined };
+  return {
+    nodes,
+    stones,
+    goldPity: Object.keys(goldPity).length > 0 ? goldPity : undefined,
+  };
 }
 
 // Toggle one node's locked flag; nothing else changes.
-function applyLock(prevNodes: NodeSnapshot[], nodeId: NodeId, locked: boolean): NodeSnapshot[] {
-  return prevNodes.map((node) => (node.id === nodeId ? { ...node, locked } : { ...node }));
+function applyLock(
+  prevNodes: NodeSnapshot[],
+  nodeId: NodeId,
+  locked: boolean
+): NodeSnapshot[] {
+  return prevNodes.map((node) =>
+    node.id === nodeId ? { ...node, locked } : { ...node }
+  );
 }
 
 /**
@@ -167,11 +202,14 @@ function applyLock(prevNodes: NodeSnapshot[], nodeId: NodeId, locked: boolean): 
  * Idempotent: re-unlocking an already-enabled node is a no-op (so we never reset
  * a node's pity by accident). Unlocks are permanent.
  */
-function applyUnlock(prevNodes: NodeSnapshot[], nodeId: NodeId): NodeSnapshot[] {
+function applyUnlock(
+  prevNodes: NodeSnapshot[],
+  nodeId: NodeId
+): NodeSnapshot[] {
   return prevNodes.map((node) => {
     if (node.id !== nodeId || node.enabled) return { ...node };
     if (node.id === AUTO_GOLD_NODE) {
-      return { ...node, enabled: true, tier: 'gold' as const, pity: 0 };
+      return { ...node, enabled: true, tier: "gold" as const, pity: 0 };
     }
     return { ...node, enabled: true, pity: 1 };
   });
@@ -183,16 +221,28 @@ function applyUnlock(prevNodes: NodeSnapshot[], nodeId: NodeId): NodeSnapshot[] 
  * cumulative rolls, and cumulative stones are preserved (unlocks are permanent
  * and already-spent stones are not refunded).
  */
-function applyRevert(prevNodes: NodeSnapshot[], input: Extract<MilestoneInput, { type: 'revert' }>): NodeSnapshot[] {
+function applyRevert(
+  prevNodes: NodeSnapshot[],
+  input: Extract<MilestoneInput, { type: "revert" }>
+): NodeSnapshot[] {
   const byId = new Map(input.nodes.map((n) => [n.id, n]));
   return prevNodes.map((node) => {
     // `enabled` is carried state (set by unlock milestones), not re-derived here.
     if (node.id === AUTO_GOLD_NODE) {
-      return { ...node, tier: node.enabled ? ('gold' as const) : null, pity: 0 };
+      return {
+        ...node,
+        tier: node.enabled ? ("gold" as const) : null,
+        pity: 0,
+      };
     }
     const r = byId.get(node.id);
     if (!r) return { ...node, pity: 0 };
-    return { ...node, locked: r.locked, tier: r.gold ? ('gold' as const) : null, pity: 0 };
+    return {
+      ...node,
+      locked: r.locked,
+      tier: r.gold ? ("gold" as const) : null,
+      pity: 0,
+    };
   });
 }
 
@@ -214,7 +264,7 @@ export function replay(inputs: MilestoneInput[]): Milestone[] {
     let nodes: NodeSnapshot[];
 
     switch (input.type) {
-      case 'roll': {
+      case "roll": {
         rolls = input.rolls;
         const result = applyRoll(prevNodes, rolls, input.goldHits);
         nodes = result.nodes;
@@ -223,13 +273,13 @@ export function replay(inputs: MilestoneInput[]): Milestone[] {
         cumulativeRolls += rolls;
         break;
       }
-      case 'unlock':
+      case "unlock":
         nodes = applyUnlock(prevNodes, input.nodeId);
         break;
-      case 'lock':
+      case "lock":
         nodes = applyLock(prevNodes, input.nodeId, input.locked);
         break;
-      case 'revert':
+      case "revert":
         nodes = applyRevert(prevNodes, input);
         break;
     }
@@ -254,7 +304,9 @@ export function replay(inputs: MilestoneInput[]): Milestone[] {
 
 // Convenience: the current node state for a session (last milestone or initial).
 export function currentNodes(milestones: Milestone[]): NodeSnapshot[] {
-  return milestones.length > 0 ? milestones[milestones.length - 1].nodes : createInitialNodes();
+  return milestones.length > 0
+    ? milestones[milestones.length - 1].nodes
+    : createInitialNodes();
 }
 
 // One fixed pity range in the gold-luck distribution (inclusive bounds).
@@ -278,7 +330,10 @@ export interface PityBucket {
  * gold at pity `p` lands in `floor((p - 1) / size)`. `p` is clamped to that
  * range defensively, though in practice it is always 1..HARD_PITY.
  */
-export function goldPityDistribution(milestones: Milestone[], size: number = GOLD_BUCKET_SIZE): { buckets: PityBucket[]; total: number } {
+export function goldPityDistribution(
+  milestones: Milestone[],
+  size: number = GOLD_BUCKET_SIZE
+): { buckets: PityBucket[]; total: number } {
   const bucketCount = Math.ceil(HARD_PITY / size);
   const buckets: PityBucket[] = Array.from({ length: bucketCount }, (_, i) => ({
     min: i * size + 1,

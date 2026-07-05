@@ -1,4 +1,4 @@
-import type { NodeId } from '@/types/reforge';
+import type { NodeId } from "@/types/reforge";
 
 export const NODE_IDS: NodeId[] = [1, 2, 3, 4, 5];
 
@@ -7,19 +7,19 @@ export const AUTO_GOLD_NODE: NodeId = 5;
 export const ROLLABLE_NODE_IDS: NodeId[] = [1, 2, 3, 4];
 
 export const NODE_LABELS: Record<NodeId, string> = {
-  1: 'Color',
-  2: 'Part 1',
-  3: 'Part 2',
-  4: 'Part 3',
-  5: 'Misc',
+  1: "Node 1",
+  2: "Node 2",
+  3: "Node 3",
+  4: "Node 4",
+  5: "Node 5",
 };
 
 export const NODE_DESCRIPTIONS: Record<NodeId, string> = {
-  1: 'Weapon color',
-  2: '1st part of the weapon',
-  3: '2nd part of the weapon',
-  4: '3rd part of the weapon',
-  5: 'Auto-gold once unlocked; follows the other nodes',
+  1: "Weapon color",
+  2: "1st part of the weapon",
+  3: "2nd part of the weapon",
+  4: "3rd part of the weapon",
+  5: "Auto-gold once unlocked; follows the other nodes",
 };
 
 // Nodes that are unlocked from the very start of a session. Only the Color node

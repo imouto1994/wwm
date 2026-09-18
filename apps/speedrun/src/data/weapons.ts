@@ -19,11 +19,24 @@ import type { WeaponEntry } from '@/types/randomizer';
  */
 export const WEAPONS: WeaponEntry[] = [
   // DPS pool
-  { id: 'sword-placeholder', name: 'Longsword (Placeholder)', image: '/images/weapons/sword-placeholder.svg', isDps: true },
-  { id: 'dual-blades-placeholder', name: 'Dual Blades (Placeholder)', image: '/images/weapons/dual-blades-placeholder.svg', isDps: true },
-  { id: 'spear-placeholder', name: 'Spear (Placeholder)', image: '/images/weapons/spear-placeholder.svg', isDps: true },
-  // Non-DPS (support/utility) weapons - still part of the ALL pool
-  { id: 'shield-placeholder', name: 'Shield (Placeholder)', image: '/images/weapons/shield-placeholder.svg', isDps: false },
-  { id: 'fan-placeholder', name: 'Fan (Placeholder)', image: '/images/weapons/fan-placeholder.svg', isDps: false },
-  { id: 'flute-placeholder', name: 'Flute (Placeholder)', image: '/images/weapons/flute-placeholder.svg', isDps: false },
+  { id: '1', name: 'Vô Danh Kiếm', image: '/images/weapons/vdk.png', isDps: true },
+  { id: '2', name: 'Vô Danh Thương', image: '/images/weapons/vdt.png', isDps: false },
+  { id: '3', name: 'Cửu Kiếm', image: '/images/weapons/9k.png', isDps: true },
+  { id: '4', name: 'Cửu Thương', image: '/images/weapons/9t.png', isDps: false },
+  { id: '5', name: 'Dù Công', image: '/images/weapons/ducong.png', isDps: true },
+  { id: '6', name: 'Quạt Công', image: '/images/weapons/quatcong.png', isDps: false },
+  { id: '7', name: 'Dù Ném', image: '/images/weapons/dunem.png', isDps: true },
+  { id: '8', name: 'Roi Ném', image: '/images/weapons/roinem.png', isDps: false },
+  { id: '9', name: 'Song Đao Chuột', image: '/images/weapons/2daochuot.png', isDps: true },
+  { id: '10', name: 'Roi Chuột', image: '/images/weapons/roichuot.png', isDps: false },
+  { id: '11', name: 'Dù Heal', image: '/images/weapons/duheal.png', isDps: false },
+  { id: '12', name: 'Quạt Heal', image: '/images/weapons/quatheal.png', isDps: false },
+  { id: '13', name: 'Đao Tank', image: '/images/weapons/daotank.png', isDps: true },
+  { id: '14', name: 'Thương Tank', image: '/images/weapons/thuongtank.png', isDps: false },
+  { id: '15', name: 'Heng', image: '/images/weapons/heng.png', isDps: true },
+  { id: '16', name: 'Đao Heng', image: '/images/weapons/daoheng.png', isDps: false },
+  { id: '17', name: 'Quyền Roi', image: '/images/weapons/quyenroi.png', isDps: true },
+  { id: '18', name: 'Roi Quyền', image: '/images/weapons/roiquyen.png', isDps: false },
+  { id: '19', name: 'Quyền Tuý', image: '/images/weapons/quyentuy.png', isDps: true },
+  { id: '20', name: 'Song Đao Tuý', image: '/images/weapons/2daotuy.png', isDps: true },
 ];

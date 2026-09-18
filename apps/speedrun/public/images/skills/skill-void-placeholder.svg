@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
-  <rect width="200" height="200" rx="16" fill="#1a1a2e"/>
-  <rect x="4" y="4" width="192" height="192" rx="14" fill="none" stroke="#8f4cc9" stroke-width="2"/>
-  <text x="100" y="110" font-family="ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="700" fill="#8f4cc9" text-anchor="middle">VOD</text>
-</svg>

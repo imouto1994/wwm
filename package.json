@@ -9,8 +9,10 @@
   "scripts": {
     "dev:boss": "pnpm --filter wwm-boss-guide dev",
     "dev:reforge": "pnpm --filter wwm-reforge dev",
+    "dev:speedrun": "pnpm --filter wwm-speedrun dev",
     "build:boss": "pnpm --filter wwm-boss-guide build:gh-pages",
     "build:reforge": "pnpm --filter wwm-reforge build",
+    "build:speedrun": "pnpm --filter wwm-speedrun build",
     "build": "pnpm -r build",
     "lint": "biome lint .",
     "format": "biome format --write ."

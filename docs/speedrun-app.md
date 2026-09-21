@@ -8,7 +8,7 @@
 
 ### 1.1 Vision
 
-A fast, client-side single-page app that supports the guild's speedrun event: each participant fights a specific boss using a **randomized loadout** — a DPS weapon, a second (different) weapon, and 8 unique mystic skills. The host randomizes a loadout, then **shares the exact result via a URL** so participants can open it and see precisely what they've been assigned. There is no backend: the URL's query string is the only persistence layer.
+A fast, client-side single-page app that supports the guild's speedrun event: each participant fights a specific boss using a **randomized loadout** — 2 different martial arts and 8 unique mystic skills. The host randomizes a loadout, then **shares the exact result via a URL** so participants can open it and see precisely what they've been assigned. There is no backend: the URL's query string is the only persistence layer.
 
 This is the third app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md) and the [Reforge Pity Tracker](reforge-app.md). Like the Reforge Tracker, it is a pure client-side SPA (no CMS, no server) — but unlike Reforge, it has **no persisted state at all** beyond what's encoded into the current URL.
 
@@ -16,7 +16,7 @@ This is the third app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md)
 
 | #   | Goal                                                     | Success Metric                                                |
 | --- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| 1   | Let the host randomize a valid loadout in one click       | 1 click -> DPS weapon + 2nd weapon + 8 unique skills            |
+| 1   | Let the host randomize a valid loadout in one click       | 1 click -> 2 different martial arts + 8 unique skills           |
 | 2   | Make results trivially shareable                         | Copy-link button yields a URL that reproduces the exact result |
 | 3   | Make the weapon/skill pools easy to extend over time       | Adding an entry is a one-line data change, no schema change    |
 
@@ -29,10 +29,10 @@ This is the third app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md)
 
 ## 2. Rules Modeled
 
-- **Weapon 1 (martial art)**: drawn from the **DPS pool** — weapons flagged `isDps: true`.
-- **Weapon 2 (martial art)**: drawn from the **ALL pool** (every weapon, DPS or not) — **guaranteed different** from Weapon 1, even though the DPS pool is a subset of the full pool.
+- **Weapon 1 and Weapon 2 (martial arts)**: both drawn uniformly from the full weapon pool — **guaranteed different** from each other.
 - **8 mystic skills**: drawn **unique**, without replacement, from the single pool of ALL mystic skills.
 - The **boss** is chosen and communicated by the host outside the app — it is not part of the randomized or shared state (see §10 Out of Scope).
+- **`isDps` flag (weapons only)**: a past version of this event restricted Weapon 1 to DPS-only weapons. That restriction has been **removed** — both slots now draw from the full pool. The `isDps` flag is kept on each weapon entry (not deleted) in case a future event wants to reintroduce a DPS-only slot; it is currently unused by the randomizer. See `randomize.ts` for the one-line change that would bring it back.
 
 ---
 
@@ -60,10 +60,10 @@ Two hand-maintained, flat arrays are the entire content model. Defined in [apps/
 
 ```typescript
 interface WeaponEntry {
-  id: string; // stable, unique, kebab-case - referenced directly in shareable URLs
+  id: string; // stable, unique - referenced directly in shareable URLs
   name: string;
   image: string; // path under /images/weapons/...; any format (png/jpg/webp/svg)
-  isDps: boolean;
+  isDps: boolean; // currently unused by the randomizer - reserved for a possible future DPS-only slot
 }
 
 interface SkillEntry {
@@ -74,16 +74,16 @@ interface SkillEntry {
 
 // The only thing ever persisted (into the URL, not localStorage).
 interface LoadoutResult {
-  weapon1Id: string; // from the DPS pool
-  weapon2Id: string; // from the full pool, guaranteed != weapon1Id
+  weapon1Id: string; // from the full weapons pool
+  weapon2Id: string; // from the full weapons pool, guaranteed != weapon1Id
   skillIds: string[]; // 8 unique ids from the full skills pool
 }
 ```
 
-- [apps/speedrun/src/data/weapons.ts](../apps/speedrun/src/data/weapons.ts) — `WEAPONS: WeaponEntry[]`. The "DPS pool" is `WEAPONS.filter((w) => w.isDps)`; the "ALL pool" is `WEAPONS` itself. **To add a martial art**: append one entry, then drop its image (any format) into `public/images/weapons/`.
+- [apps/speedrun/src/data/weapons.ts](../apps/speedrun/src/data/weapons.ts) — `WEAPONS: WeaponEntry[]`. Both randomized weapon slots draw uniformly from this array, unfiltered. **To add a martial art**: append one entry, then drop its image (any format) into `public/images/weapons/`.
 - [apps/speedrun/src/data/skills.ts](../apps/speedrun/src/data/skills.ts) — `SKILLS: SkillEntry[]`, one flat pool (no DPS/non-DPS split for skills). **To add a mystic skill**: append one entry, then drop its image into `public/images/skills/`.
-- Both files currently hold **placeholder entries** (clearly labeled `(Placeholder)`, with simple hand-drawn SVG art) so the app is runnable and testable immediately. Real names/art get swapped in later purely by editing these two files and the images under `public/images/` — no code changes needed.
-- [apps/speedrun/src/data/data.test.ts](../apps/speedrun/src/data/data.test.ts) guards the pools: every entry has a non-empty `id`/`name`/`image`, ids are unique within each pool, at least one weapon is a DPS weapon, and there are at least 8 skills. Keep this green when editing the data files.
+- Both files currently hold **real weapon/skill entries and art** for the event (earlier placeholder entries have been fully replaced). To add more, just append entries following the same shape and drop images under `public/images/` — no code changes needed.
+- [apps/speedrun/src/data/data.test.ts](../apps/speedrun/src/data/data.test.ts) guards the pools: every entry has a non-empty `id`/`name`/`image`, ids are unique within each pool, at least 2 weapons, and at least 8 skills. It does **not** require any DPS-flagged weapon — `isDps` is optional/inert data (see §2). Keep this test green when editing the data files.
 - **Never reuse or repurpose an `id`** that a live event's already-shared links might still reference.
 
 ---
@@ -98,11 +98,12 @@ Framework-free, unit-tested functions in [apps/speedrun/src/lib](../apps/speedru
 function randomizeLoadout(weapons: WeaponEntry[], skills: SkillEntry[], rng: () => number = Math.random): LoadoutResult;
 ```
 
-- Weapon 1: a uniform random pick from `weapons.filter((w) => w.isDps)`.
-- Weapon 2: a uniform random pick from `weapons` **excluding weapon 1's id** — this is what enforces "must differ" even though the DPS pool is a subset of the full pool.
+- Weapon 1: a uniform random pick from the full `weapons` pool.
+- Weapon 2: a uniform random pick from `weapons` **excluding weapon 1's id** — this is what enforces "must differ".
 - 8 mystic skills: drawn via a partial Fisher–Yates shuffle over `skills` (no replacement) — every permutation of every 8-sized subset is equally likely given an unbiased `rng`.
 - `rng` is injectable so tests can drive the engine deterministically (see `randomize.test.ts`).
-- Throws a descriptive `Error` if a pool is too small to satisfy the rules (no DPS weapons, fewer than 2 weapons total, or fewer than 8 skills) — the UI catches this and shows a friendly message instead of crashing.
+- Throws a descriptive `Error` if a pool is too small to satisfy the rules (fewer than 2 weapons total, or fewer than 8 skills) — the UI catches this and shows a friendly message instead of crashing.
+- `WeaponEntry.isDps` is **not** read by this function. A past version restricted weapon 1 to `weapons.filter((w) => w.isDps)`; that restriction was removed per product decision, but the flag stays on the data model so it can be reintroduced with a one-line change if a future event wants it back.
 
 ### 5.2 Shareable URL (`shareLink.ts`)
 
@@ -146,9 +147,9 @@ Decided **once, at initial page load**, from whether the URL already had a valid
 
 ### 6.2 Components ([apps/speedrun/src/components](../apps/speedrun/src/components))
 
-- **EntryCard** — a weapon or skill: a fixed 1:1 aspect-ratio image frame (so the grid never jumps around as art of varying dimensions gets swapped in) plus its name, and an optional small badge (e.g. "DPS" on the 1st weapon slot).
+- **EntryCard** — a weapon or skill: a fixed 1:1 aspect-ratio image frame (so the grid never jumps around as art of varying dimensions gets swapped in) plus its name. No badges/tags — every weapon and skill is displayed identically, regardless of any metadata (e.g. `isDps`) it carries.
 - **ImageWithFallback** — renders an entry's image via a plain `<img>` (PNG, JPEG, WEBP, or SVG all work identically), falling back to a styled initials box if the image 404s or fails to decode — mirrors the Boss Guide's "Clip unavailable" pattern (see [SPEC.md](SPEC.md) §4.3). Also covers the case of a shared link referencing an id whose entry was later removed from the data files (`LoadoutResult` renders an "Unavailable" placeholder slot for that case).
-- **LoadoutResult** — 2 `EntryCard`s for the weapons (Weapon 1 badged "DPS") + an 8-up responsive grid of `EntryCard`s for the mystic skills, sorted to pool order.
+- **LoadoutResult** — 2 `EntryCard`s for the weapons + an 8-up responsive grid of `EntryCard`s for the mystic skills, sorted to pool order. Both weapon slots render exactly the same way.
 - **RandomizeButton**, **ShareLink** — host-mode only.
 
 ### 6.3 Theme
@@ -246,20 +247,24 @@ Creating the actual Vercel project itself is a manual dashboard step, same as it
 ### Phase 1 — Foundation (implemented)
 
 - [x] Vite + React 18 + TS scaffold at `apps/speedrun` with Tailwind 4 + wuxia palette, mirroring `apps/reforge`
-- [x] Domain types + pure `randomizeLoadout` (DPS pool, must-differ 2nd weapon, 8 unique skills, pool-size guards)
+- [x] Domain types + pure `randomizeLoadout` (2 different weapons from the full pool, 8 unique skills, pool-size guards)
 - [x] Pure `encodeLoadout`/`decodeLoadout`/`buildShareUrl` — the URL is the only persistence
 - [x] Host vs. viewer mode via `useLoadout`, decided once at mount
 - [x] UI: `EntryCard` (+ format-agnostic `ImageWithFallback`), `LoadoutResult`, `RandomizeButton`, `ShareLink`
-- [x] Placeholder weapon/skill data (6 weapons, 10 skills) + placeholder SVG art + `data.test.ts` integrity checks
+- [x] Placeholder weapon/skill data + placeholder SVG art + `data.test.ts` integrity checks
 - [x] Vitest unit tests for the engine, the share-link codec, and the data pools
 - [x] Vercel config; root workspace scripts (`dev:speedrun`, `build:speedrun`)
 
-### Phase 2 — Content
+### Phase 2 — Content (implemented)
 
-- [ ] Replace placeholder weapon/skill entries with real names and screenshots
+- [x] Replace placeholder weapon/skill entries with real names and screenshots (20 weapons, 21 skills)
+- [x] Remove the "weapon 1 must be DPS" restriction per product decision; `isDps` kept on the data model for a possible future event
+
+### Phase 3 — Possible future content work
+
 - [ ] Confirm final weapon/skill pool sizes with the guild before the event
 
-### Phase 3 — Future (explicitly out of scope for now — see §10)
+### Phase 4 — Future (explicitly out of scope for now — see §10)
 
 - [ ] QR code rendering for the share link
 - [ ] Optional boss name/note field carried in the shared link

@@ -5,10 +5,10 @@ import { useLoadout } from '@/hooks/useLoadout';
 /**
  * Speedrun Loadout Randomizer.
  *
- * Host mode (opened the bare URL): click Randomize to draw a DPS weapon, a
- * 2nd (different) weapon, and 8 unique mystic skills; the result and its
- * shareable URL stay on screen, and Randomize can be clicked again for each
- * next participant.
+ * Host mode (opened the bare URL): click Randomize to draw 2 different
+ * martial arts and 8 unique mystic skills; the result and its shareable URL
+ * stay on screen, and Randomize can be clicked again for each next
+ * participant.
  *
  * Viewer mode (opened a URL that already decoded a valid result): read-only
  * - no Randomize button, just the shared result plus a link to start a fresh
@@ -26,7 +26,7 @@ export default function App() {
         <h1 className='flex items-center gap-2 text-2xl font-bold text-gold'>
           <Swords size={24} /> Speedrun Loadout Randomizer
         </h1>
-        <p className='mt-1 text-sm text-muted'>Randomize a DPS weapon, a second weapon, and 8 mystic skills for the guild speedrun event.</p>
+        <p className='mt-1 text-sm text-muted'>Randomize 2 martial arts and 8 mystic skills for the guild speedrun event.</p>
       </header>
 
       {isViewerMode && (
@@ -45,7 +45,7 @@ export default function App() {
 
       {loadout && <LoadoutResult loadout={loadout} />}
 
-      {!isViewerMode && !loadout && !error && <p className='text-muted'>Click Randomize to draw a DPS weapon, a second weapon, and 8 mystic skills.</p>}
+      {!isViewerMode && !loadout && !error && <p className='text-muted'>Click Randomize to draw 2 martial arts and 8 mystic skills.</p>}
 
       {!isViewerMode && shareUrl && <ShareLink url={shareUrl} />}
 

@@ -33,10 +33,15 @@ function sampleUnique<T>(pool: readonly T[], count: number, rng: Rng): T[] {
 
 /**
  * Randomizes one full speedrun loadout:
- * - Weapon 1 comes from the DPS-only pool (`isDps: true`).
- * - Weapon 2 comes from the full pool, excluding whichever weapon was just
- *   picked for slot 1 (the two martial arts must differ).
+ * - Weapon 1 and Weapon 2 are both drawn uniformly from the full weapons
+ *   pool, guaranteed different from each other.
  * - 8 unique mystic skills are drawn from the full skills pool.
+ *
+ * `WeaponEntry.isDps` is intentionally NOT used here - a past version of
+ * this event restricted Weapon 1 to DPS-only weapons, but that restriction
+ * was removed. The flag is kept on the data model (not deleted) in case a
+ * future event wants it back; see the "future: reintroduce a DPS-only slot"
+ * note below for how to do that without touching the data files.
  *
  * Pure and framework-free: no randomness escapes except through `rng`, so
  * this is fully deterministic (and testable) when `rng` is seeded/mocked.
@@ -46,20 +51,19 @@ function sampleUnique<T>(pool: readonly T[], count: number, rng: Rng): T[] {
  * (the UI) should catch this and show a friendly message.
  */
 export function randomizeLoadout(weapons: readonly WeaponEntry[], skills: readonly SkillEntry[], rng: Rng = Math.random): LoadoutResult {
-  const dpsPool = weapons.filter((weapon) => weapon.isDps);
-  if (dpsPool.length === 0) {
-    throw new Error('No DPS weapons in the pool yet - add at least one weapon with isDps: true to src/data/weapons.ts.');
-  }
   if (weapons.length < 2) {
-    throw new Error('Need at least 2 weapons in the pool (1 DPS + 1 other) to randomize a loadout.');
+    throw new Error('Need at least 2 weapons in the pool to randomize a loadout.');
   }
   if (skills.length < 8) {
     throw new Error(`Need at least 8 mystic skills in the pool to randomize a loadout (currently ${skills.length}).`);
   }
 
-  const weapon1 = pickRandom(dpsPool, rng);
-  // Excluding weapon1's id from the 2nd pick's pool enforces "must differ"
-  // even though the DPS pool is a subset of the full pool.
+  const weapon1 = pickRandom(weapons, rng);
+  // Excluding weapon1's id from the 2nd pick's pool enforces "must differ".
+  // Future: reintroduce a DPS-only slot 1 by passing
+  // `weapons.filter((w) => w.isDps)` as the pool for weapon1 here instead of
+  // the full `weapons` array - everything else (weapon2's exclusion, the
+  // skill draw) stays the same.
   const weapon2Pool = weapons.filter((weapon) => weapon.id !== weapon1.id);
   const weapon2 = pickRandom(weapon2Pool, rng);
   const mysticSkills = sampleUnique(skills, 8, rng);

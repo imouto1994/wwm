@@ -35,7 +35,9 @@ export function LoadoutResult({ loadout }: LoadoutResultProps) {
       <section>
         <h2 className='mb-2 text-sm font-semibold uppercase tracking-wide text-muted'>Martial Arts</h2>
         <div className='grid max-w-sm grid-cols-2 gap-3'>
-          {weapon1 ? <EntryCard name={weapon1.name} image={weapon1.image} badge='DPS' /> : <MissingEntry />}
+          {/* Both slots draw from the same full pool (see randomize.ts) and
+              are displayed identically - isDps is not surfaced in the UI. */}
+          {weapon1 ? <EntryCard name={weapon1.name} image={weapon1.image} /> : <MissingEntry />}
           {weapon2 ? <EntryCard name={weapon2.name} image={weapon2.image} /> : <MissingEntry />}
         </div>
       </section>

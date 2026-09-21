@@ -8,13 +8,15 @@
  * the line is a one-line data change, never a schema change.
  */
 
-// A single martial art (weapon) pool entry. `isDps` decides eligibility for
-// the 1st randomized pick (DPS pool); the 2nd pick draws from the full pool
-// (this array, unfiltered).
+// A single martial art (weapon) pool entry. Both randomized weapon slots
+// draw uniformly from the full pool (this array, unfiltered) - see
+// src/lib/randomize.ts.
 export interface WeaponEntry {
-  id: string; // stable, unique, kebab-case - referenced directly in shareable URLs
+  id: string; // stable, unique - referenced directly in shareable URLs
   name: string;
   image: string; // path under /images/weapons/...; any format works (png/jpg/webp/svg)
+  // Currently NOT used by the randomizer (kept on the data model in case a
+  // future event wants to restrict a slot to DPS-only weapons again).
   isDps: boolean;
 }
 
@@ -30,7 +32,7 @@ export interface SkillEntry {
 // This is the only thing persisted - into the URL, not localStorage - so a
 // shared link fully describes a run (see src/lib/shareLink.ts).
 export interface LoadoutResult {
-  weapon1Id: string; // drawn from the DPS pool
-  weapon2Id: string; // drawn from the full pool, guaranteed != weapon1Id
+  weapon1Id: string; // drawn from the full weapons pool
+  weapon2Id: string; // drawn from the full weapons pool, guaranteed != weapon1Id
   skillIds: string[]; // 8 unique ids drawn from the full skills pool
 }

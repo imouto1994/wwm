@@ -3,10 +3,10 @@ import type { WeaponEntry } from '@/types/randomizer';
 /**
  * The martial art (weapon) pool.
  *
- * "DPS pool" (the 1st randomized weapon) is just `WEAPONS.filter((w) => w.isDps)`;
- * the "ALL pool" (the 2nd randomized weapon) is `WEAPONS` itself. There is no
- * separate array to keep in sync - a weapon's DPS-eligibility is just a flag
- * on its own entry.
+ * Both randomized weapon slots draw uniformly from this array (unfiltered) -
+ * see src/lib/randomize.ts. `isDps` is currently NOT used by the randomizer;
+ * it's kept on each entry in case a future event wants to restrict a slot to
+ * DPS-only weapons again (a past version of this event did that for slot 1).
  *
  * To add a new martial art: append one entry below with a unique `id`, then
  * drop its image (any format - png/jpg/webp/svg) into public/images/weapons/.
@@ -18,7 +18,6 @@ import type { WeaponEntry } from '@/types/randomizer';
  * screenshots into public/images/weapons/ whenever they're ready.
  */
 export const WEAPONS: WeaponEntry[] = [
-  // DPS pool
   { id: '1', name: 'Vô Danh Kiếm', image: '/images/weapons/vdk.png', isDps: true },
   { id: '2', name: 'Vô Danh Thương', image: '/images/weapons/vdt.png', isDps: false },
   { id: '3', name: 'Cửu Kiếm', image: '/images/weapons/9k.png', isDps: true },

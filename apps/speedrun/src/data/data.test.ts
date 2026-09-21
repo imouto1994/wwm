@@ -5,9 +5,13 @@ import { describe, expect, it } from 'vitest';
 /**
  * Guards the hand-maintained data pools (src/data/weapons.ts, src/data/skills.ts)
  * against mistakes that would silently break URL decoding or the randomizer:
- * a duplicate/blank id, a missing name/image, or an empty DPS pool. Anyone
- * adding a new weapon or skill gets a fast, clear failure here instead of a
- * confusing runtime bug during the event.
+ * a duplicate/blank id, a missing name/image, or too few weapons/skills.
+ * Anyone adding a new weapon or skill gets a fast, clear failure here instead
+ * of a confusing runtime bug during the event.
+ *
+ * Note: `isDps` is currently NOT enforced here (e.g. "at least one DPS
+ * weapon") because the randomizer doesn't use it right now - see
+ * src/lib/randomize.ts. It's fine for every weapon to be isDps: false.
  */
 describe('WEAPONS pool', () => {
   it('has every entry with a non-empty id, name, and image', () => {
@@ -23,9 +27,8 @@ describe('WEAPONS pool', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('has at least one DPS weapon and at least 2 weapons total', () => {
+  it('has at least 2 weapons total', () => {
     expect(WEAPONS.length).toBeGreaterThanOrEqual(2);
-    expect(WEAPONS.some((w) => w.isDps)).toBe(true);
   });
 });
 

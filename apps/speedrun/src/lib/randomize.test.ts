@@ -31,13 +31,18 @@ function fractionsForTrial(trial: number, denominator: number): number[] {
 }
 
 describe('randomizeLoadout', () => {
-  it('always draws weapon 1 from the DPS pool', () => {
-    for (let trial = 0; trial < 25; trial++) {
-      const rng = makeQueueRng(fractionsForTrial(trial, 25));
+  it('draws weapon 1 from the full pool (not restricted to DPS weapons)', () => {
+    // isDps is currently inert (see randomize.ts) - this guards against
+    // accidentally reintroducing a DPS-only filter for weapon 1. Runs enough
+    // trials that a non-DPS weapon (w-other-1/w-other-2) should show up at
+    // least once if weapon 1 truly draws from the whole pool.
+    const drawnWeapon1Ids = new Set<string>();
+    for (let trial = 0; trial < 100; trial++) {
+      const rng = makeQueueRng(fractionsForTrial(trial, 100));
       const result = randomizeLoadout(WEAPONS, SKILLS, rng);
-      const weapon1 = WEAPONS.find((w) => w.id === result.weapon1Id);
-      expect(weapon1?.isDps).toBe(true);
+      drawnWeapon1Ids.add(result.weapon1Id);
     }
+    expect(drawnWeapon1Ids.has('w-other-1') || drawnWeapon1Ids.has('w-other-2')).toBe(true);
   });
 
   it('always draws weapon 2 different from weapon 1, from the full pool', () => {
@@ -68,9 +73,11 @@ describe('randomizeLoadout', () => {
     expect(resultA).toEqual(resultB);
   });
 
-  it('throws a friendly error when the pool has no DPS weapons', () => {
-    const noDpsWeapons = [weapon('w-1', false), weapon('w-2', false)];
-    expect(() => randomizeLoadout(noDpsWeapons, SKILLS)).toThrow(/DPS/i);
+  it('does not require any DPS-flagged weapon in the pool', () => {
+    // isDps is currently inert for randomization - a pool with every weapon
+    // flagged isDps: false must still work.
+    const noDpsWeapons = [weapon('w-1', false), weapon('w-2', false), weapon('w-3', false)];
+    expect(() => randomizeLoadout(noDpsWeapons, SKILLS)).not.toThrow();
   });
 
   it('throws a friendly error when there are fewer than 2 weapons', () => {

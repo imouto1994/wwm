@@ -38,4 +38,6 @@ export const WEAPONS: WeaponEntry[] = [
   { id: '18', name: 'Roi Quyền', image: '/images/weapons/roiquyen.png', isDps: false },
   { id: '19', name: 'Quyền Tuý', image: '/images/weapons/quyentuy.png', isDps: true },
   { id: '20', name: 'Song Đao Tuý', image: '/images/weapons/2daotuy.png', isDps: false },
+  { id: '21', name: 'Trống Lụa', image: '/images/weapons/tronglua.png', isDps: true },
+  { id: '22', name: 'Quạt Lụa', image: '/images/weapons/quatlua.png', isDps: false },
 ];

@@ -1,6 +1,7 @@
 import { LoadoutResult } from '@/components/LoadoutResult';
 import { RandomizeButton } from '@/components/RandomizeButton';
 import { ShareLink } from '@/components/ShareLink';
+import { useEditMode } from '@/hooks/useEditMode';
 import { useLoadout } from '@/hooks/useLoadout';
 /**
  * Speedrun Loadout Randomizer.
@@ -11,14 +12,24 @@ import { useLoadout } from '@/hooks/useLoadout';
  * participant.
  *
  * Viewer mode (opened a URL that already decoded a valid result): read-only
- * - no Randomize button, just the shared result plus a link to start a fresh
- * (host-mode) run. Mode is fixed for the page's whole lifetime; see
- * useLoadout and docs/speedrun-app.md.
+ * for randomization - no Randomize button, just the shared result plus a
+ * link to start a fresh (host-mode) run. Mode is fixed for the page's whole
+ * lifetime; see useLoadout and docs/speedrun-app.md.
+ *
+ * Hidden Edit Mode (Alt+P): when a loadout is on screen, toggles clickable
+ * cards so a host can manually swap weapons/skills. Works in both host and
+ * viewer mode (so opening your own shared link still lets you tweak it);
+ * each edit rewrites the URL the same way Randomize does.
  */
 import { Swords } from 'lucide-react';
 
 export default function App() {
-  const { loadout, isViewerMode, shareUrl, error, randomize } = useLoadout();
+  const { loadout, isViewerMode, shareUrl, error, randomize, setWeapon, setSkill } = useLoadout();
+  const { isEditMode } = useEditMode();
+
+  // Share link is useful whenever there's a result the host might want to
+  // re-copy - including after a viewer-mode edit of a shared link.
+  const showShareLink = Boolean(shareUrl) && (!isViewerMode || isEditMode);
 
   return (
     <div className='mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8'>
@@ -39,15 +50,26 @@ export default function App() {
         </div>
       )}
 
+      {isEditMode && (
+        <div className='rounded-lg border border-gold bg-surface px-4 py-3 text-sm text-fg'>
+          <span className='font-semibold text-gold'>Edit mode</span>
+          {loadout
+            ? ' — click a weapon or skill to change it. Press Alt+P again to exit.'
+            : ' — randomize a loadout first, then click a card to change it. Press Alt+P again to exit.'}
+        </div>
+      )}
+
       {error && <div className='rounded-lg border border-red/40 bg-surface px-4 py-3 text-sm text-red'>{error}</div>}
 
       {!isViewerMode && <RandomizeButton hasResult={loadout !== null} onClick={randomize} />}
 
-      {loadout && <LoadoutResult loadout={loadout} />}
+      {loadout && (
+        <LoadoutResult loadout={loadout} isEditMode={isEditMode} onSetWeapon={setWeapon} onSetSkill={setSkill} />
+      )}
 
       {!isViewerMode && !loadout && !error && <p className='text-muted'>Click Randomize to draw 2 martial arts and 8 mystic skills.</p>}
 
-      {!isViewerMode && shareUrl && <ShareLink url={shareUrl} />}
+      {showShareLink && shareUrl && <ShareLink url={shareUrl} />}
 
       <footer className='pt-2 text-center text-xs text-muted'>
         Unofficial fan tool for the Where Winds Meet guild, not affiliated with Everstone Studios.

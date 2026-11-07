@@ -1,5 +1,6 @@
 import { SKILLS } from '@/data/skills';
 import { WEAPONS } from '@/data/weapons';
+import { replaceSkill, replaceWeapon, type WeaponSlot } from '@/lib/editLoadout';
 import { randomizeLoadout } from '@/lib/randomize';
 import { buildShareUrl, decodeLoadout, encodeLoadout } from '@/lib/shareLink';
 import type { LoadoutResult } from '@/types/randomizer';
@@ -20,12 +21,23 @@ function initLoadoutState(): LoadoutState {
   return { loadout: decoded, isViewerMode: decoded !== null };
 }
 
+// Mirrors a loadout into the address bar the same way randomize() does, so a
+// manual edit and a re-roll leave the URL in the same shape. Shared so the
+// two mutation paths can't drift.
+function syncUrl(loadout: LoadoutResult): void {
+  if (typeof window === 'undefined') return;
+  const params = encodeLoadout(loadout);
+  window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+}
+
 interface UseLoadoutResult {
   loadout: LoadoutResult | null;
   isViewerMode: boolean;
   shareUrl: string | null;
   error: string | null;
   randomize: () => void;
+  setWeapon: (slot: WeaponSlot, weaponId: string) => void;
+  setSkill: (currentSkillId: string, newSkillId: string) => void;
 }
 
 /**
@@ -39,6 +51,9 @@ interface UseLoadoutResult {
  *
  * Viewer mode: `randomize()` is a no-op guard (the UI never wires up a
  * Randomize button in this mode anyway, but the hook stays safe either way).
+ * Manual edits via `setWeapon`/`setSkill` (Edit Mode) ARE allowed in viewer
+ * mode - Alt+P is a hidden host feature that works on any already-loaded
+ * result, including a shared link the host themselves opened.
  */
 export function useLoadout(): UseLoadoutResult {
   const [state, setState] = useState<LoadoutState>(initLoadoutState);
@@ -49,10 +64,7 @@ export function useLoadout(): UseLoadoutResult {
       if (prev.isViewerMode) return prev;
       try {
         const next = randomizeLoadout(WEAPONS, SKILLS);
-        if (typeof window !== 'undefined') {
-          const params = encodeLoadout(next);
-          window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-        }
+        syncUrl(next);
         setError(null);
         return { ...prev, loadout: next };
       } catch (err) {
@@ -62,7 +74,41 @@ export function useLoadout(): UseLoadoutResult {
     });
   }, []);
 
+  // Manual slot edits (Edit Mode). Unlike randomize(), these are allowed in
+  // viewer mode so a host who opened their own shared link can still tweak
+  // it. Invalid replacements (unknown id, duplicate weapon/skill) are no-ops
+  // - replaceWeapon/replaceSkill already return null for those cases.
+  const setWeapon = useCallback((slot: WeaponSlot, weaponId: string) => {
+    setState((prev) => {
+      if (!prev.loadout) return prev;
+      const next = replaceWeapon(prev.loadout, slot, weaponId, WEAPONS);
+      if (!next) return prev;
+      syncUrl(next);
+      setError(null);
+      return { ...prev, loadout: next };
+    });
+  }, []);
+
+  const setSkill = useCallback((currentSkillId: string, newSkillId: string) => {
+    setState((prev) => {
+      if (!prev.loadout) return prev;
+      const next = replaceSkill(prev.loadout, currentSkillId, newSkillId, SKILLS);
+      if (!next) return prev;
+      syncUrl(next);
+      setError(null);
+      return { ...prev, loadout: next };
+    });
+  }, []);
+
   const shareUrl = state.loadout && typeof window !== 'undefined' ? buildShareUrl(state.loadout, window.location.origin, window.location.pathname) : null;
 
-  return { loadout: state.loadout, isViewerMode: state.isViewerMode, shareUrl, error, randomize };
+  return {
+    loadout: state.loadout,
+    isViewerMode: state.isViewerMode,
+    shareUrl,
+    error,
+    randomize,
+    setWeapon,
+    setSkill,
+  };
 }

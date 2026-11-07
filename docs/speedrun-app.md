@@ -134,6 +134,17 @@ flowchart LR
 
 The drawn `skillIds` are re-sorted back into their original `SKILLS` pool order before rendering (not the shuffled draw order), so the grid reads consistently every time — the randomness is in *which* 8 are picked, not in how they're laid out on screen.
 
+### 5.4 Manual edits (`editLoadout.ts`)
+
+Hidden Edit Mode (see §6.5) swaps a single slot via pure helpers:
+
+```typescript
+function replaceWeapon(loadout, slot: 1 | 2, newWeaponId, weapons): LoadoutResult | null;
+function replaceSkill(loadout, currentSkillId, newSkillId, skills): LoadoutResult | null;
+```
+
+Both return `null` (no-op) for unknown ids or uniqueness violations — weapon slots must stay different, skill ids must stay unique. Picker candidate lists (`weaponPickerOptions` / `skillPickerOptions`) already exclude the other slot's current pick so the UI can't offer an illegal choice, but the pure helpers remain the source of truth.
+
 ---
 
 ## 6. UI / UX
@@ -143,14 +154,16 @@ The drawn `skillIds` are re-sorted back into their original `SKILLS` pool order 
 Decided **once, at initial page load**, from whether the URL already had a valid, decodable loadout — never re-evaluated afterward:
 
 - **Host mode** (bare URL, or an invalid/stale one): empty state + `RandomizeButton`. After the first randomize, shows the result + `ShareLink`, and **keeps the `RandomizeButton` visible** so the host can keep re-rolling for each next participant in the same tab. Each click overwrites the on-screen result and the address bar via `history.replaceState` (not `pushState`, so rerolling doesn't pile up back-button history); already-copied earlier links are unaffected since they're plain text elsewhere (Discord, etc.).
-- **Viewer mode** (a URL that decoded successfully): **read-only** — the result plus a "Shared result" banner, no `RandomizeButton`. A "Start a new randomization" link (a real navigation to the bare path) lets a viewer who wants their own roll drop into host mode.
+- **Viewer mode** (a URL that decoded successfully): no `RandomizeButton`. A "Start a new randomization" link (a real navigation to the bare path) lets a viewer who wants their own roll drop into host mode. Manual edits via Edit Mode (§6.5) are still allowed.
 
 ### 6.2 Components ([apps/speedrun/src/components](../apps/speedrun/src/components))
 
-- **EntryCard** — a weapon or skill: a fixed 1:1 aspect-ratio image frame (so the grid never jumps around as art of varying dimensions gets swapped in) plus its name. No badges/tags — every weapon and skill is displayed identically, regardless of any metadata (e.g. `isDps`) it carries.
+- **EntryCard** — a weapon or skill: a fixed 1:1 aspect-ratio image frame (so the grid never jumps around as art of varying dimensions gets swapped in) plus its name. No badges/tags — every weapon and skill is displayed identically, regardless of any metadata (e.g. `isDps`) it carries. In Edit Mode it becomes a button with a "Click to change" hint.
+- **EntryPicker** — overlay shown when an editable card is clicked; lists eligible replacements as `EntryCard`s. Escape / backdrop / Cancel dismisses without changing anything.
 - **ImageWithFallback** — renders an entry's image via a plain `<img>` (PNG, JPEG, WEBP, or SVG all work identically), falling back to a styled initials box if the image 404s or fails to decode — mirrors the Boss Guide's "Clip unavailable" pattern (see [SPEC.md](SPEC.md) §4.3). Also covers the case of a shared link referencing an id whose entry was later removed from the data files (`LoadoutResult` renders an "Unavailable" placeholder slot for that case).
-- **LoadoutResult** — 2 `EntryCard`s for the weapons + an 8-up responsive grid of `EntryCard`s for the mystic skills, sorted to pool order. Both weapon slots render exactly the same way.
-- **RandomizeButton**, **ShareLink** — host-mode only.
+- **LoadoutResult** — 2 `EntryCard`s for the weapons + an 8-up responsive grid of `EntryCard`s for the mystic skills, sorted to pool order. Both weapon slots render exactly the same way. Wires Edit Mode clicks into `EntryPicker`.
+- **RandomizeButton** — host-mode only.
+- **ShareLink** — host mode, or viewer mode while Edit Mode is on (so a host who opened their own shared link can re-copy after tweaking).
 
 ### 6.3 Theme
 
@@ -158,7 +171,22 @@ Reuses the wuxia dark ink-wash palette from the Reforge Tracker / Boss Guide ([a
 
 ### 6.4 State
 
-The only React state is `{ loadout, isViewerMode }`, owned by [useLoadout](../apps/speedrun/src/hooks/useLoadout.ts). `isViewerMode` is set once (lazily, from the URL at mount) and never flips. `randomize()` is a no-op guard in viewer mode (defense in depth — the UI never wires up a Randomize control there anyway).
+Loadout state (`{ loadout, isViewerMode }`) is owned by [useLoadout](../apps/speedrun/src/hooks/useLoadout.ts). `isViewerMode` is set once (lazily, from the URL at mount) and never flips. `randomize()` is a no-op guard in viewer mode (defense in depth — the UI never wires up a Randomize control there anyway). `setWeapon` / `setSkill` are allowed in both modes and rewrite the URL via the same `replaceState` path as randomize.
+
+Edit Mode itself (`isEditMode`) lives in a separate [useEditMode](../apps/speedrun/src/hooks/useEditMode.ts) hook so the keyboard shortcut stays orthogonal to loadout state.
+
+### 6.5 Hidden Edit Mode (Alt/Option+P)
+
+No visible entry point — press **Alt+P** (Option+P on macOS) to toggle. When on:
+
+- A banner confirms Edit Mode is active.
+- Every weapon/skill card becomes clickable; clicking opens `EntryPicker` with eligible replacements.
+- Choosing a replacement updates the loadout and the URL (same encoding as a randomize).
+- Works in both host and viewer mode.
+- Ignored while focus is in an `<input>` / `<textarea>` so it can't fire while copying the share URL.
+- Press Alt/Option+P again (or leave the page) to exit.
+
+Detection uses `event.code === 'KeyP'` (physical key), not `event.key`. On macOS, Option+P inserts "π", so a key-character check would never fire.
 
 ---
 
@@ -206,12 +234,16 @@ apps/speedrun/
     ├── lib/
     │   ├── randomize.ts      # pure randomization engine
     │   ├── randomize.test.ts
+    │   ├── editLoadout.ts    # pure manual slot replace + picker options
+    │   ├── editLoadout.test.ts
     │   ├── shareLink.ts      # pure URL encode/decode/build
     │   └── shareLink.test.ts
     ├── hooks/
-    │   └── useLoadout.ts     # owns { loadout, isViewerMode }, randomize(), shareUrl
+    │   ├── useLoadout.ts     # owns { loadout, isViewerMode }, randomize/setWeapon/setSkill, shareUrl
+    │   └── useEditMode.ts    # Alt+P Edit Mode toggle
     └── components/
         ├── EntryCard.tsx
+        ├── EntryPicker.tsx
         ├── ImageWithFallback.tsx
         ├── LoadoutResult.tsx
         ├── RandomizeButton.tsx

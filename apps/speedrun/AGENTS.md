@@ -6,7 +6,7 @@ Guidelines for working on the **Speedrun Loadout Randomizer** (`apps/speedrun`),
 
 - A tool for the guild's speedrun event: the host randomizes 2 different martial arts and 8 unique mystic skills, then shares the exact result via a URL.
 - A client-side SPA: Vite + React 18 + TypeScript + Tailwind 4. **No backend, no router, no CMS, no localStorage.** The URL's query string *is* the persistence layer - there is nothing else to persist.
-- It does **not** randomize the boss (chosen and communicated by the host outside the app), does not keep a history of past randomizations, and does not support rerolling a single slot. Do not add these without checking with the team first - they were deliberately left out of the MVP (see [docs/speedrun-app.md](../../docs/speedrun-app.md) "Out of scope").
+- It does **not** randomize the boss (chosen and communicated by the host outside the app), does not keep a history of past randomizations, and does not support rerolling a single *random* slot. There is a **hidden Edit Mode** (Alt+P) for manually swapping weapons/skills after a result is on screen - see below.
 
 ## The one mental model that matters
 
@@ -28,14 +28,18 @@ Randomize click  --randomizeLoadout()--> LoadoutResult --encodeLoadout()--> hist
 - `src/data/weapons.ts`, `src/data/skills.ts` - the two hand-maintained pools. **This is the primary place you'll edit to add content.** Append an entry with a unique `id`, then drop its image into `public/images/weapons/` or `public/images/skills/` (any format works - PNG, JPEG, WEBP, SVG - the `image` field is just a path rendered through a plain `<img>`). Never reuse or repurpose an `id` that a live event's shared links might still reference.
 - `src/data/data.test.ts` - guards the pools: unique ids, non-empty fields, at least 2 weapons, at least 8 skills. Keep this green - it is the safety net for careless data edits. Does **not** require any DPS-flagged weapon (see above).
 - `src/lib/randomize.ts` - **pure, framework-free** `randomizeLoadout(weapons, skills, rng?)`. Weapon 1 and weapon 2 are both drawn uniformly from the full weapons pool, with weapon 2 excluding weapon 1's id (must differ); 8 unique skills via a partial Fisher-Yates shuffle. Takes an injectable `rng` for deterministic tests. Throws a descriptive error on too-small pools - callers must catch and show it, not let it crash the UI. See the "Future: reintroduce a DPS-only slot" comment inline for how to bring that back if a later event wants it.
+- `src/lib/editLoadout.ts` - **pure** manual-edit helpers used by Edit Mode: `replaceWeapon` / `replaceSkill` (return `null` on invalid swaps) and `weaponPickerOptions` / `skillPickerOptions` (eligible candidates for the picker, excluding the other slot's current pick so uniqueness is preserved).
 - `src/lib/shareLink.ts` - **pure** `encodeLoadout`/`decodeLoadout` (against `URLSearchParams`) and `buildShareUrl` (takes `origin`/`pathname` as plain args, not `window`, to stay unit-testable). `decodeLoadout` returns `null` - never throws - for anything that doesn't fully validate (missing param, wrong skill count, duplicate/unknown id, `w1 === w2`), so a stale/edited/garbage URL just falls back to the empty host state.
-- `src/hooks/useLoadout.ts` - owns `{ loadout, isViewerMode }` plus `randomize()` and the derived `shareUrl`. The only piece of React state in the app.
-- `src/components/` - `EntryCard` (generic weapon/skill card, fixed 1:1 image frame, no badges/tags), `ImageWithFallback` (falls back to an initials box on a 404/decode failure, regardless of image format), `LoadoutResult` (2 weapon cards + an 8-up skill grid, skills sorted back to their pool order for a stable display), `RandomizeButton` and `ShareLink` (both host-mode only).
+- `src/hooks/useLoadout.ts` - owns `{ loadout, isViewerMode }` plus `randomize()` / `setWeapon()` / `setSkill()` and the derived `shareUrl`. Manual edits are allowed even in viewer mode (Alt+P is a hidden host feature).
+- `src/hooks/useEditMode.ts` - Alt+P toggle for Edit Mode. Orthogonal to host/viewer; ignored while focus is in an input/textarea.
+- `src/components/` - `EntryCard` (generic weapon/skill card; clickable in Edit Mode), `EntryPicker` (overlay to choose a replacement), `ImageWithFallback`, `LoadoutResult`, `RandomizeButton` (host-mode only), `ShareLink` (host mode, or viewer mode while Edit Mode is on).
 
 ## Invariants that are easy to get wrong
 
-- **Weapon 2 must differ from weapon 1** - `randomizeLoadout` excludes weapon 1's id from weapon 2's candidate pool. Don't drop this exclusion.
+- **Weapon 2 must differ from weapon 1** - both `randomizeLoadout` and `replaceWeapon` enforce this. Don't drop either check.
+- **Skills stay unique** - `replaceSkill` rejects swapping in an id already held by another slot. Picker options already exclude those, but the pure helper is the source of truth.
 - **`isDps` is currently inert** - not used by the randomizer, and not surfaced anywhere in the UI (no badge/tag). Don't reintroduce a DPS filter or a "DPS" badge without an explicit product decision - both were removed on purpose. The flag stays on the data model only so it's cheap to bring either back later.
+- **Edit Mode is hidden** - no visible button to enter it, only Alt+P. Keep it that way unless the product decision changes.
 - **Skill display order != draw order.** `LoadoutResult` re-sorts the drawn skill ids back into `SKILLS`'s pool order before rendering. The randomness is in *which* 8 are drawn, not in the on-screen order.
 - **`isViewerMode` is set once and never flips.** Don't derive it from `loadout !== null` at render time - that would make a host's own freshly-randomized result look like "viewer mode" too.
 - **`decodeLoadout` must return `null`, never throw**, for any invalid input - it runs on every page load, including ones with a hand-edited or stale URL.

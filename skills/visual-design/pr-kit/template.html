@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      if (new URLSearchParams(location.search).get('theme') === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      .frame {
+        height: 340px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame" id="frame">
+      <div class="title">Claim in one line: what the reader should take away</div>
+      <div class="subtitle">
+        How to read it, plus any caveat such as “Durations are illustrative.” Identifiers go in
+        <code>code</code>.
+      </div>
+
+      <div class="box" id="source" style="left: 32px; top: 130px; width: 250px">
+        <div class="box-title">ExistingModule <span class="pill unchanged">unchanged</span></div>
+        <div class="box-sub">One line on its role</div>
+        <div class="field">someField</div>
+      </div>
+
+      <div class="box new" id="added" style="left: 420px; top: 110px; width: 300px">
+        <div class="box-title">NewThing <span class="pill new">new</span></div>
+        <div class="box-sub">What it does, in at most two short lines</div>
+        <div class="chips">
+          <div class="chip"><span>Tunable parameter</span><b>config · 2s</b></div>
+        </div>
+      </div>
+
+      <div class="box" id="reader" style="left: 900px; top: 120px; width: 270px">
+        <div class="box-title">ModifiedConsumer</div>
+        <div class="ternary">useReader()</div>
+        <div class="ternary">isDriven ? store : immediate</div>
+        <div class="ui">RenderedComponent</div>
+      </div>
+
+      <div class="strip">
+        <span class="pill unchanged">unchanged</span>
+        <span><b>Thing A</b></span>·<span><b>Thing B</b></span>
+      </div>
+    </div>
+
+    <script src="edges.js"></script>
+    <script>
+      const { edge } = createEdges();
+      edge(['source', 'right'], ['added', 'left']);
+      edge(['added', 'right'], ['reader', 'left'], {
+        tone: 'green',
+        label: 'publishes<small>before paint</small>',
+        dy: -22,
+      });
+    </script>
+  </body>
+</html>

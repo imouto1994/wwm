@@ -1,6 +1,6 @@
 # Reforge Pity Tracker - Agent Guide
 
-Guidelines for working on the **Reforge Pity Tracker** (`apps/reforge`), one of two apps in this monorepo (the other is `apps/boss-guide`). Read this before changing anything here. The full spec is [docs/reforge-app.md](../../docs/reforge-app.md); the game mechanics reference is [docs/reforge.md](../../docs/reforge.md).
+Guidelines for working on the **Reforge Pity Tracker** (`apps/reforge`), one of four apps in this monorepo (the others are `apps/boss-guide`, `apps/speedrun` and `apps/pvp`). Read this before changing anything here. The full spec is [docs/reforge-app.md](../../docs/reforge-app.md); the game mechanics reference is [docs/reforge.md](../../docs/reforge.md).
 
 ## What this app is (and is not)
 

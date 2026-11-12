@@ -1,0 +1,30 @@
+{
+  "name": "wwm-pvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "vite --port 2140",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 2140"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.41.0",
+    "lucide-react": "^0.484.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^22.18.12",
+    "@types/react": "^18.3.26",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.1.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.16"
+  }
+}

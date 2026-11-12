@@ -1,6 +1,6 @@
 # Speedrun Loadout Randomizer - Agent Guide
 
-Guidelines for working on the **Speedrun Loadout Randomizer** (`apps/speedrun`), one of three apps in this monorepo (the others are `apps/boss-guide` and `apps/reforge`). Read this before changing anything here. The full spec is [docs/speedrun-app.md](../../docs/speedrun-app.md).
+Guidelines for working on the **Speedrun Loadout Randomizer** (`apps/speedrun`), one of four apps in this monorepo (the others are `apps/boss-guide`, `apps/reforge` and `apps/pvp`). Read this before changing anything here. The full spec is [docs/speedrun-app.md](../../docs/speedrun-app.md).
 
 ## What this app is (and is not)
 

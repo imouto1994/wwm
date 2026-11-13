@@ -59,7 +59,7 @@ The boss guide deploys to GitHub Pages via GitHub Actions on push to `main`. The
 - Boss Guide: [docs/SPEC.md](docs/SPEC.md)
 - Reforge Tracker: [docs/reforge-app.md](docs/reforge-app.md) (mechanics reference: [docs/reforge.md](docs/reforge.md))
 - Speedrun Randomizer: [docs/speedrun-app.md](docs/speedrun-app.md)
-- PvP Tournament Tracker: [docs/pvp-app.md](docs/pvp-app.md)
+- PvP Tournament Tracker: [docs/pvp-app.md](docs/pvp-app.md) (production deploy runbook: [docs/pvp-deploy.md](docs/pvp-deploy.md))
 
 ## Disclaimer
 

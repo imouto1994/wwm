@@ -308,7 +308,7 @@ Other statuses: `400` invalid JSON or document, `401` wrong or missing PIN, `403
 | Install          | pnpm workspace install at repo root (keep "Include files outside the root directory" enabled) |
 | Node version     | root `package.json` `engines.node` = `24.x` (mirrored in `apps/pvp/package.json`)      |
 
-One-time setup (manual, in the Vercel dashboard):
+The full step-by-step runbook, with verification, a rehearsal, event-day operations and recovery recipes, is [pvp-deploy.md](pvp-deploy.md). In short, one-time setup (manual, in the Vercel dashboard):
 
 1. Create a project from this repo with Root Directory `apps/pvp`.
 2. **Storage → Marketplace → Upstash Redis**, free plan, connected to the project. It injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` for every environment.

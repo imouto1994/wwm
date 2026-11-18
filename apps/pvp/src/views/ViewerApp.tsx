@@ -1,28 +1,30 @@
 import { ChampionBanner } from '@/components/ChampionBanner';
+import { LocaleSwitch } from '@/components/LocaleSwitch';
 import { Section } from '@/components/Section';
 import { SeriesCard } from '@/components/SeriesCard';
 import { NowPlaying } from '@/components/viewer/NowPlaying';
 import { PredictionsPanel } from '@/components/viewer/PredictionsPanel';
 import { QualificationPanel } from '@/components/viewer/QualificationPanel';
 import { RecentResults } from '@/components/viewer/RecentResults';
+import { useI18n } from '@/hooks/useI18n';
 import { useNow } from '@/hooks/useNow';
 import { useTournamentFeed } from '@/hooks/useTournamentFeed';
-import { STAGE_LABELS, nameLookup } from '@/lib/names';
+import { formatAgo } from '@/lib/i18n';
+import { nameLookup } from '@/lib/names';
 import { championOf } from '@/lib/reducer';
 import { isSeriesComplete } from '@/lib/series';
-import { formatAgo } from '@/lib/time';
 import type { SeriesStage, Tournament } from '@/types/tournament';
 import { Swords } from 'lucide-react';
 
 // Later stages first: once the knockouts start, they are what viewers came for.
-const STAGE_SECTIONS: { stage: SeriesStage; title: string }[] = [
-  { stage: 'final', title: 'Grand final' },
-  { stage: 'semi', title: 'Semifinals' },
-  { stage: 'playIn', title: 'Play-in' },
-  { stage: 'group', title: 'Group stage' },
+const STAGE_SECTIONS: { stage: SeriesStage; title: 'final' | 'semis' | 'groups' }[] = [
+  { stage: 'final', title: 'final' },
+  { stage: 'semi', title: 'semis' },
+  { stage: 'group', title: 'groups' },
 ];
 
 function Bracket({ tournament }: { tournament: Tournament }) {
+  const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   return (
     <>
@@ -34,8 +36,8 @@ function Bracket({ tournament }: { tournament: Tournament }) {
         return (
           <Section
             key={stage}
-            title={isDrawPreview ? 'Group draw' : title}
-            aside={isDrawPreview ? 'Not started yet' : `${finished} of ${series.length} finished`}
+            title={isDrawPreview ? t.viewer.groupDraw : t.stages[title]}
+            aside={isDrawPreview ? t.viewer.notStartedYet : t.viewer.finishedOf(finished, series.length)}
           >
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
               {series.map((entry) => (
@@ -51,6 +53,7 @@ function Bracket({ tournament }: { tournament: Tournament }) {
 
 /** Read-only live page. Polls the public state; see useTournamentFeed. */
 export function ViewerApp() {
+  const { t } = useI18n();
   const { tournament, status, updatedAt } = useTournamentFeed();
   const now = useNow();
   const nameOf = tournament ? nameLookup(tournament) : (playerId: string) => playerId;
@@ -59,30 +62,32 @@ export function ViewerApp() {
   return (
     <div className='mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8'>
       <header className='flex flex-col gap-1'>
-        <h1 className='flex items-center gap-2 text-2xl font-bold text-gold'>
-          <Swords size={24} /> {tournament?.name ?? 'Guild PvP Tournament'}
-        </h1>
+        <div className='flex items-start justify-between gap-3'>
+          <h1 className='flex items-center gap-2 text-2xl font-bold text-gold'>
+            <Swords size={24} /> {tournament?.name ?? t.meta.defaultEventName}
+          </h1>
+          <LocaleSwitch />
+        </div>
         <p className='flex flex-wrap items-center gap-2 text-sm text-muted'>
-          {tournament && <span className='rounded-md border border-border px-2 py-0.5 text-fg'>{STAGE_LABELS[tournament.stage]}</span>}
+          {tournament && <span className='rounded-md border border-border px-2 py-0.5 text-fg'>{t.stages[tournament.stage]}</span>}
           {status === 'live' && updatedAt !== null && (
             <span className='flex items-center gap-1.5'>
-              <span className='size-2 rounded-full bg-green' /> Live · updated {formatAgo(updatedAt, now)}
+              <span className='size-2 rounded-full bg-green' /> {t.viewer.live(formatAgo(updatedAt, now, t))}
             </span>
           )}
           {status === 'offline' && (
             <span className='flex items-center gap-1.5 text-red'>
-              <span className='size-2 rounded-full bg-red' /> Reconnecting…{updatedAt !== null && ` last update ${formatAgo(updatedAt, now)}`}
+              <span className='size-2 rounded-full bg-red' /> {t.viewer.reconnecting}
+              {updatedAt !== null && t.viewer.lastUpdate(formatAgo(updatedAt, now, t))}
             </span>
           )}
         </p>
       </header>
 
-      {status === 'loading' && !tournament && <p className='text-muted'>Loading the bracket…</p>}
+      {status === 'loading' && !tournament && <p className='text-muted'>{t.viewer.loading}</p>}
 
       {status !== 'loading' && (!tournament || (tournament.stage === 'setup' && tournament.series.length === 0)) && (
-        <p className='rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted'>
-          The tournament hasn’t started yet. This page updates by itself, so keep it open.
-        </p>
+        <p className='rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted'>{t.viewer.notStarted}</p>
       )}
 
       {tournament && (
@@ -96,9 +101,7 @@ export function ViewerApp() {
         </>
       )}
 
-      <footer className='pt-2 text-center text-xs text-muted'>
-        Unofficial fan tool for the Where Winds Meet guild, not affiliated with Everstone Studios.
-      </footer>
+      <footer className='pt-2 text-center text-xs text-muted'>{t.meta.footer}</footer>
     </div>
   );
 }

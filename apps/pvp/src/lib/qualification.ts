@@ -1,119 +1,80 @@
 import type { PlayerId, Series, Tournament } from '../types/tournament.js';
-import { SEMIFINALISTS, formatFor, isSupportedCount } from './format.js';
-import { type Tie, rankRecords, tiesAcrossCut } from './ranking.js';
+import { formatFor, isSupportedCount } from './format.js';
+import { type Tie, compareRecords, rankRecords } from './ranking.js';
 import { type PlayerRecord, seriesRecords, seriesWinner } from './series.js';
 
 export interface GroupStageOutcome {
-  /** Every group has a winner. `qualifiers`, `playIn` and `ties` are only final once this is true. */
+  /** Every group has a winner. */
   complete: boolean;
   /** Winners of finished groups, in group order. */
   winners: PlayerId[];
-  /** Runners-up of finished groups, in group order. Only computed when the format uses them (21, 24, 30). */
-  runnersUp: PlayerId[];
-  /** `runnersUp` best first: the runners-up race shown to viewers, and the spare-spot order. */
-  rankedRunnersUp: PlayerId[];
-  /** Group-stage record per player, used for every ranking and for seeding. */
+  /** Group-stage record per player: ranks the host's pick candidates and seeds the semifinals. */
   records: Map<PlayerId, PlayerRecord>;
-  /** Direct semifinal spots: 9 players, or 8 at 30 players where the play-in decides the last one. */
-  qualifiers: PlayerId[];
-  /** 30 players only: the two weakest group winners plus the best runner-up. */
-  playIn: PlayerId[];
-  /** Ties that still change the outcome and need a recorded draw. */
-  ties: Tie[];
 }
 
 export function groupSeries(tournament: Tournament): Series[] {
   return tournament.series.filter((series) => series.stage === 'group');
 }
 
-const EMPTY_OUTCOME: GroupStageOutcome = {
-  complete: false,
-  winners: [],
-  runnersUp: [],
-  rankedRunnersUp: [],
-  records: new Map(),
-  qualifiers: [],
-  playIn: [],
-  ties: [],
-};
-
 function recordOf(records: Map<PlayerId, PlayerRecord>, playerId: PlayerId): PlayerRecord {
   return records.get(playerId) ?? { playerId, wins: 0, points: 0, games: 0 };
 }
 
-/**
- * Applies the qualification rules to the group stage. Works on partial
- * results too, so the viewer can show winners and the runners-up race while
- * groups are still being played.
- */
+/** Group winners and records so far. Works on partial results, so the viewer can follow along. */
 export function groupStageOutcome(tournament: Tournament): GroupStageOutcome {
-  if (!isSupportedCount(tournament.players.length)) return EMPTY_OUTCOME;
-  const format = formatFor(tournament.players.length);
   const groups = groupSeries(tournament);
-  const needsRunnersUp = format.runnerUpSpots > 0 || format.hasPlayIn;
-
   const records = new Map<PlayerId, PlayerRecord>();
   const winners: PlayerId[] = [];
-  const runnersUp: PlayerId[] = [];
-  const ties: Tie[] = [];
-  let complete = groups.length === format.groups;
-
   for (const series of groups) {
-    const groupRecords = seriesRecords(series);
-    for (const record of groupRecords) records.set(record.playerId, record);
+    for (const record of seriesRecords(series)) records.set(record.playerId, record);
     const winner = seriesWinner(series);
-    if (!winner) {
-      complete = false;
-      continue;
-    }
-    winners.push(winner);
-    if (needsRunnersUp) {
-      const others = groupRecords.filter((record) => record.playerId !== winner);
-      const ranked = rankRecords(others, `runnerUp:${series.id}`, tournament.tieDraws);
-      runnersUp.push(ranked.order[0]);
-      ties.push(...ranked.ties);
-    }
+    if (winner) winners.push(winner);
   }
-
-  const rankedRunnersUp = rankRecords(
-    runnersUp.map((playerId) => recordOf(records, playerId)),
-    'runnersUp',
-    tournament.tieDraws
-  );
-
-  let qualifiers: PlayerId[] = [];
-  let playIn: PlayerId[] = [];
-  if (complete) {
-    if (format.hasPlayIn) {
-      const rankedWinners = rankRecords(
-        winners.map((playerId) => recordOf(records, playerId)),
-        'winners',
-        tournament.tieDraws
-      );
-      const direct = SEMIFINALISTS - 1;
-      qualifiers = rankedWinners.order.slice(0, direct);
-      playIn = [...rankedWinners.order.slice(direct), rankedRunnersUp.order[0]];
-      ties.push(...tiesAcrossCut(rankedWinners.ties, rankedWinners.order, direct), ...tiesAcrossCut(rankedRunnersUp.ties, rankedRunnersUp.order, 1));
-    } else {
-      qualifiers = [...winners, ...rankedRunnersUp.order.slice(0, format.runnerUpSpots)];
-      ties.push(...tiesAcrossCut(rankedRunnersUp.ties, rankedRunnersUp.order, format.runnerUpSpots));
-    }
-  }
-
-  return { complete, winners, runnersUp, rankedRunnersUp: rankedRunnersUp.order, records, qualifiers, playIn, ties };
+  const complete =
+    isSupportedCount(tournament.players.length) && groups.length === formatFor(tournament.players.length).groups && winners.length === groups.length;
+  return { complete, winners, records };
 }
 
-/** The nine semifinalists, once the group stage (and the play-in at 30 players) is decided. */
-export function semifinalistsOf(tournament: Tournament): PlayerId[] | undefined {
+export interface SemifinalSelection {
+  /** Empty spots the host fills (21 → 2, 24 → 1) and winners the host leaves out (30 → 1). */
+  fillInSpots: number;
+  dropSpots: number;
+  /** The host's picks that still fit the current results (an undone game can turn a fill-in into a winner). */
+  fillIns: PlayerId[];
+  dropped: PlayerId[];
+  /** Who the host can pick, best group-stage record first: non-winners to fill a spot, winners to leave out. */
+  fillInCandidates: PlayerId[];
+  dropCandidates: PlayerId[];
+  /** The nine semifinalists, once every group is decided and the picks are complete. */
+  semifinalists?: PlayerId[];
+}
+
+/**
+ * Applies the qualification rule: every group winner goes through, and the
+ * host's picks make up the difference to 9. The host decides on purpose (no
+ * runner-up ranking or play-in), so the candidate lists are only ordered by
+ * record as a guide.
+ */
+export function semifinalSelection(tournament: Tournament): SemifinalSelection {
+  const empty: SemifinalSelection = { fillInSpots: 0, dropSpots: 0, fillIns: [], dropped: [], fillInCandidates: [], dropCandidates: [] };
+  if (!isSupportedCount(tournament.players.length)) return empty;
+  const { fillInSpots, dropSpots } = formatFor(tournament.players.length);
   const outcome = groupStageOutcome(tournament);
-  if (!outcome.complete || outcome.ties.length > 0) return undefined;
-  if (!formatFor(tournament.players.length).hasPlayIn) return outcome.qualifiers;
-  const playIn = tournament.series.find((series) => series.stage === 'playIn');
-  const playInWinner = playIn ? seriesWinner(playIn) : undefined;
-  return playInWinner ? [...outcome.qualifiers, playInWinner] : undefined;
+  const winners = new Set(outcome.winners);
+  const byRecord = (playerIds: PlayerId[]) => [...playerIds].sort((a, b) => compareRecords(recordOf(outcome.records, a), recordOf(outcome.records, b)));
+
+  const fillInCandidates = fillInSpots > 0 ? byRecord(tournament.players.map((player) => player.id).filter((playerId) => !winners.has(playerId))) : [];
+  const dropCandidates = dropSpots > 0 ? byRecord(outcome.winners) : [];
+  const picks = tournament.semifinalPicks;
+  const fillIns = (picks?.fillIns ?? []).filter((playerId) => fillInCandidates.includes(playerId)).slice(0, fillInSpots);
+  const dropped = (picks?.dropped ?? []).filter((playerId) => winners.has(playerId)).slice(0, dropSpots);
+
+  const ready = outcome.complete && fillIns.length === fillInSpots && dropped.length === dropSpots;
+  const semifinalists = ready ? [...outcome.winners.filter((playerId) => !dropped.includes(playerId)), ...fillIns] : undefined;
+  return { fillInSpots, dropSpots, fillIns, dropped, fillInCandidates, dropCandidates, ...(semifinalists ? { semifinalists } : {}) };
 }
 
-/** Seeds come from group-stage records, so group winners always rank above runners-up. */
+/** Seeds come from group-stage records, so group winners normally rank above fill-ins. */
 export function seedingOrder(tournament: Tournament, semifinalists: readonly PlayerId[]): { order: PlayerId[]; ties: Tie[] } {
   const { records } = groupStageOutcome(tournament);
   return rankRecords(
@@ -123,22 +84,9 @@ export function seedingOrder(tournament: Tournament, semifinalists: readonly Pla
   );
 }
 
-/**
- * Ties blocking the next stage. Group runner-up ties come first because they
- * decide who is a runner-up at all; resolving them can expose new ties, so
- * callers re-check after recording draws (see the `resolveTies` action).
- */
+/** Seeding ties blocking the semifinals. Known only once the host's picks are complete. */
 export function pendingTies(tournament: Tournament): Tie[] {
-  if (tournament.stage === 'groups') {
-    const outcome = groupStageOutcome(tournament);
-    if (!outcome.complete) return [];
-    if (outcome.ties.length > 0) return outcome.ties;
-    if (formatFor(tournament.players.length).hasPlayIn) return [];
-    return seedingOrder(tournament, outcome.qualifiers).ties;
-  }
-  if (tournament.stage === 'playIn') {
-    const semifinalists = semifinalistsOf(tournament);
-    return semifinalists ? seedingOrder(tournament, semifinalists).ties : [];
-  }
-  return [];
+  if (tournament.stage !== 'groups') return [];
+  const { semifinalists } = semifinalSelection(tournament);
+  return semifinalists ? seedingOrder(tournament, semifinalists).ties : [];
 }

@@ -21,7 +21,7 @@ export interface Game {
   savedAt: string;
 }
 
-export type SeriesStage = 'group' | 'playIn' | 'semi' | 'final';
+export type SeriesStage = 'group' | 'semi' | 'final';
 
 /** One Discord member's prediction, imported from the EasyPoll votes JSON. */
 export interface Ballot {
@@ -30,7 +30,7 @@ export interface Ballot {
   playerId: PlayerId;
 }
 
-/** EasyPoll result for one series. Predictions never affect the bracket. */
+/** EasyPoll result for "who wins this series?". Predictions never affect the bracket. */
 export interface Poll {
   votes: Record<PlayerId, number>;
   /** Present only when the host imported the per-voter JSON. */
@@ -38,13 +38,32 @@ export interface Poll {
   recordedAt: string;
 }
 
+export type GamesPick = 'over' | 'under';
+
+/** One Discord member's over/under pick on how many games the series takes. */
+export interface GamesBallot {
+  discordId: string;
+  username: string;
+  pick: GamesPick;
+}
+
+/** EasyPoll result for "over or under N games?". */
+export interface GamesPoll {
+  /** The line voters saw, kept with the result so a later line change can't reinterpret old votes. */
+  line: number;
+  votes: Record<GamesPick, number>;
+  ballots?: GamesBallot[];
+  recordedAt: string;
+}
+
 /** A group of three playing first to `winsNeeded` game wins. */
 export interface Series {
   id: string;
   stage: SeriesStage;
+  /** English name ("Group 3"), kept in the document; screens show the localized name from `id` and `stage` instead. */
   label: string;
   playerIds: [PlayerId, PlayerId, PlayerId];
-  /** 2 = first to 2 wins; 1 = a single match (play-in, late-running semifinals). */
+  /** 2 = first to 2 wins; 1 = a single match (late-running semifinals). */
   winsNeeded: 1 | 2;
   games: Game[];
   /** Set when the host taps Start; marks the series as live for viewers. */
@@ -52,9 +71,24 @@ export interface Series {
   /** A host ruling (forfeit, disconnect) that decides the series regardless of games. */
   winnerOverride?: { playerId: PlayerId; reason: string };
   poll?: Poll;
+  /** Over/under line for the games prediction, set by the host (default 2.5 when unset). First-to-2 series only. */
+  gamesLine?: number;
+  gamesPoll?: GamesPoll;
 }
 
-export type Stage = 'setup' | 'groups' | 'playIn' | 'semis' | 'final' | 'done';
+export type Stage = 'setup' | 'groups' | 'semis' | 'final' | 'done';
+
+/**
+ * The host's say in who reaches the 9 semifinal spots when the group winners
+ * don't fill them exactly: 21 and 24 players leave spots empty, 30 has a
+ * winner too many. At 27 players both lists stay empty.
+ */
+export interface SemifinalPicks {
+  /** Players who didn't win their group but take an empty spot (2 at 21 players, 1 at 24). */
+  fillIns: PlayerId[];
+  /** Group winners left out so only 9 go through (1 at 30 players). */
+  dropped: PlayerId[];
+}
 
 /**
  * A random draw that broke a tie, recorded so every screen (and every later
@@ -82,6 +116,8 @@ export interface Tournament {
   /** Late-running rule: semifinals are a single match each. */
   lateRule: boolean;
   tieDraws: TieDraw[];
+  /** Set during the group stage at 21, 24 and 30 players; see SemifinalPicks. */
+  semifinalPicks?: SemifinalPicks;
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };

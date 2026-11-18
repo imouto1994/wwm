@@ -27,7 +27,7 @@ const TIER_POSITIONS = [0, 1, 2].map((tier) => SEMIFINAL_SEEDS.map((positions) =
  * Splits nine seeded players (best first) into three semifinal groups.
  *
  * Starts from the snake seeding; if that puts two players from the same
- * first-round group together (a group winner and its runner-up), it swaps
+ * first-round group together (a group winner and a fill-in from that group), it swaps
  * players within the same seed tier. Of all tier-preserving arrangements
  * (6^3 = 216), it picks the conflict-free one that moves the fewest players,
  * so the result stays as close to the snake as possible and is deterministic.

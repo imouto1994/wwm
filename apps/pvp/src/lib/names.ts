@@ -5,12 +5,3 @@ export function nameLookup(tournament: Tournament): (playerId: PlayerId) => stri
   const names = new Map(tournament.players.map((player) => [player.id, player.name]));
   return (playerId) => names.get(playerId) ?? playerId;
 }
-
-export const STAGE_LABELS = {
-  setup: 'Setup',
-  groups: 'Group stage',
-  playIn: 'Play-in',
-  semis: 'Semifinals',
-  final: 'Grand final',
-  done: 'Finished',
-} as const;

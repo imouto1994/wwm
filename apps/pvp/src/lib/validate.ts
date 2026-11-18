@@ -1,13 +1,30 @@
-import type { Ballot, Game, Placement, Player, PlayerId, Poll, Result, Series, SeriesStage, Stage, TieDraw, Tournament } from '../types/tournament.js';
-import { isSupportedCount } from './format.js';
+import type {
+  Ballot,
+  Game,
+  GamesBallot,
+  GamesPick,
+  GamesPoll,
+  Placement,
+  Player,
+  PlayerId,
+  Poll,
+  Result,
+  SemifinalPicks,
+  Series,
+  SeriesStage,
+  Stage,
+  TieDraw,
+  Tournament,
+} from '../types/tournament.js';
+import { isSupportedCount, isValidGamesLine } from './format.js';
 
 // Turns untrusted JSON (a PUT body on the server, a GET response in the
 // browser) into a Tournament, or explains what is wrong. It never throws and
 // rebuilds every object field by field, so unknown keys are dropped and a
 // malformed document can never be saved or rendered.
 
-const STAGES: readonly Stage[] = ['setup', 'groups', 'playIn', 'semis', 'final', 'done'];
-const SERIES_STAGES: readonly SeriesStage[] = ['group', 'playIn', 'semi', 'final'];
+const STAGES: readonly Stage[] = ['setup', 'groups', 'semis', 'final', 'done'];
+const SERIES_STAGES: readonly SeriesStage[] = ['group', 'semi', 'final'];
 
 class Invalid extends Error {}
 
@@ -56,6 +73,34 @@ function parsePoll(value: unknown, path: string, players: readonly PlayerId[]): 
   return { votes, ...(ballots ? { ballots } : {}), recordedAt: value.recordedAt };
 }
 
+const GAMES_PICKS: readonly GamesPick[] = ['over', 'under'];
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+function parseGamesPoll(value: unknown, path: string): GamesPoll {
+  check(
+    isObject(value) && isValidGamesLine(value.line) && isObject(value.votes) && isString(value.recordedAt),
+    `${path} must have a line, votes and recordedAt.`
+  );
+  const { votes } = value;
+  check(isCount(votes.over) && isCount(votes.under), `${path}.votes must count over and under in whole numbers.`);
+  let ballots: GamesBallot[] | undefined;
+  if (value.ballots !== undefined) {
+    check(Array.isArray(value.ballots), `${path}.ballots must be a list.`);
+    ballots = value.ballots.map((ballot, index) => {
+      check(
+        isObject(ballot) &&
+          isString(ballot.discordId) &&
+          isString(ballot.username) &&
+          isString(ballot.pick) &&
+          (GAMES_PICKS as readonly string[]).includes(ballot.pick),
+        `${path}.ballots[${index}] is invalid.`
+      );
+      return { discordId: ballot.discordId, username: ballot.username, pick: ballot.pick as GamesPick };
+    });
+  }
+  return { line: value.line, votes: { over: votes.over, under: votes.under }, ...(ballots ? { ballots } : {}), recordedAt: value.recordedAt };
+}
+
 function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<PlayerId>): Series {
   check(isObject(value), `${path} must be an object.`);
   check(isString(value.id) && value.id, `${path}.id is missing.`);
@@ -92,6 +137,9 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
     winnerOverride = { playerId: override.playerId, reason: override.reason };
   }
   const poll = value.poll === undefined ? undefined : parsePoll(value.poll, `${path}.poll`, playerIds);
+  check(value.gamesLine === undefined || isValidGamesLine(value.gamesLine), `${path}.gamesLine must be a multiple of 0.5 between 0.5 and 10.`);
+  const gamesLine = value.gamesLine;
+  const gamesPoll = value.gamesPoll === undefined ? undefined : parseGamesPoll(value.gamesPoll, `${path}.gamesPoll`);
 
   return {
     id: value.id,
@@ -103,6 +151,8 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
     ...(isString(value.startedAt) ? { startedAt: value.startedAt } : {}),
     ...(winnerOverride ? { winnerOverride } : {}),
     ...(poll ? { poll } : {}),
+    ...(typeof gamesLine === 'number' ? { gamesLine } : {}),
+    ...(gamesPoll ? { gamesPoll } : {}),
   };
 }
 
@@ -116,6 +166,20 @@ function parseTieDraw(value: unknown, path: string, knownPlayers: ReadonlySet<Pl
     `${path} is invalid.`
   );
   return { key: value.key, order: value.order as PlayerId[], drawnAt: value.drawnAt };
+}
+
+// Only the shape is checked here: whether a pick still fits the results is
+// derived (see semifinalSelection), because undoing a game can change it.
+function parseSemifinalPicks(value: unknown, knownPlayers: ReadonlySet<PlayerId>): SemifinalPicks {
+  check(isObject(value) && Array.isArray(value.fillIns) && Array.isArray(value.dropped), 'semifinalPicks must have fillIns and dropped lists.');
+  const ids = (list: unknown[], name: string): PlayerId[] => {
+    check(
+      list.every((playerId) => isString(playerId) && knownPlayers.has(playerId)) && new Set(list).size === list.length,
+      `semifinalPicks.${name} must list known players once each.`
+    );
+    return list as PlayerId[];
+  };
+  return { fillIns: ids(value.fillIns, 'fillIns'), dropped: ids(value.dropped, 'dropped') };
 }
 
 export function parseTournament(input: unknown): Result<Tournament> {
@@ -141,6 +205,7 @@ export function parseTournament(input: unknown): Result<Tournament> {
     check(input.currentSeriesId === undefined || series.some((entry) => entry.id === input.currentSeriesId), 'currentSeriesId points to a missing series.');
     check(Array.isArray(input.tieDraws), 'tieDraws must be a list.');
     const tieDraws = input.tieDraws.map((draw, index) => parseTieDraw(draw, `tieDraws[${index}]`, knownPlayers));
+    const semifinalPicks = input.semifinalPicks === undefined ? undefined : parseSemifinalPicks(input.semifinalPicks, knownPlayers);
 
     return {
       ok: true,
@@ -155,6 +220,7 @@ export function parseTournament(input: unknown): Result<Tournament> {
         ...(isString(input.currentSeriesId) ? { currentSeriesId: input.currentSeriesId } : {}),
         lateRule: input.lateRule,
         tieDraws,
+        ...(semifinalPicks ? { semifinalPicks } : {}),
       },
     };
   } catch (error) {

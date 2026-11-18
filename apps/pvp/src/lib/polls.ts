@@ -1,10 +1,13 @@
-import type { Ballot, Player, PlayerId, Result, Series, Tournament } from '../types/tournament.js';
-import { seriesWinner } from './series.js';
+import type { Ballot, GamesBallot, GamesPick, Player, PlayerId, Series, Tournament } from '../types/tournament.js';
+import { DEFAULT_GAMES_LINE } from './format.js';
+import type { Translatable } from './i18n.js';
+import { isSeriesComplete, seriesWinner } from './series.js';
 
-// Discord predictions. Members vote in an EasyPoll per series; the host
-// either types the three counts or imports the per-voter JSON produced by
-// scripts/easypoll/easypoll-to-json.mjs. Predictions are display-only and
-// never affect the bracket.
+// Discord predictions. For every series, members vote in up to two EasyPolls:
+// who wins, and (first-to-2 series only) over or under the host's line on how
+// many games it takes. The host either types the counts or imports the
+// per-voter JSON produced by the EasyPoll converter. Predictions are
+// display-only and never affect the bracket.
 
 /** One row of the converter script's output. */
 export interface VoteEntry {
@@ -23,44 +26,36 @@ export function normalizeAnswer(text: string): string {
 }
 
 /** Parses and checks the converter's JSON array. Never throws. */
-export function parseVotesJson(text: string): Result<VoteEntry[]> {
+export function parseVotesJson(text: string): { ok: true; value: VoteEntry[] } | { ok: false; error: Translatable } {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    return { ok: false, error: 'That is not valid JSON.' };
+    return { ok: false, error: (t) => t.poll.invalidJson };
   }
-  if (!Array.isArray(data)) return { ok: false, error: 'Expected a JSON array of votes.' };
+  if (!Array.isArray(data)) return { ok: false, error: (t) => t.poll.notArray };
   const entries: VoteEntry[] = [];
   for (const [index, item] of data.entries()) {
-    if (typeof item !== 'object' || item === null) return { ok: false, error: `Entry ${index + 1} is not an object.` };
+    if (typeof item !== 'object' || item === null) return { ok: false, error: (t) => t.poll.entryNotObject(index + 1) };
     const { discordId, username, vote } = item as Record<string, unknown>;
     if (typeof discordId !== 'string' || !discordId || typeof vote !== 'string' || !vote) {
-      return { ok: false, error: `Entry ${index + 1} needs a discordId and a vote.` };
+      return { ok: false, error: (t) => t.poll.entryMissing(index + 1) };
     }
     entries.push({ discordId, username: typeof username === 'string' ? username : '', vote });
   }
   return { ok: true, value: entries };
 }
 
-export interface MatchedVotes {
-  votes: Record<PlayerId, number>;
-  ballots: Ballot[];
-  /** Answers that matched none of the series' players, with how many votes each. */
+interface Unmatched {
+  /** Answers that couldn't be read, with how many votes each. */
   unmatched: { answer: string; count: number }[];
   /** Discord members listed more than once; only their first vote counts. */
   duplicates: number;
 }
 
-/** Matches each vote to one of the series' players by name. */
-export function matchVotes(series: Series, players: readonly Player[], entries: readonly VoteEntry[]): MatchedVotes {
-  const byName = new Map<string, PlayerId>();
-  for (const playerId of series.playerIds) {
-    const player = players.find((candidate) => candidate.id === playerId);
-    if (player) byName.set(normalizeAnswer(player.name), playerId);
-  }
-  const votes: Record<PlayerId, number> = Object.fromEntries(series.playerIds.map((playerId) => [playerId, 0]));
-  const ballots: Ballot[] = [];
+/** Shared matching loop: one vote per Discord member, answers read by `read`. */
+function matchEntries<T>(entries: readonly VoteEntry[], read: (answer: string) => T | undefined) {
+  const matched: { entry: VoteEntry; value: T }[] = [];
   const unmatched = new Map<string, number>();
   const seen = new Set<string>();
   let duplicates = 0;
@@ -70,15 +65,70 @@ export function matchVotes(series: Series, players: readonly Player[], entries: 
       continue;
     }
     seen.add(entry.discordId);
-    const playerId = byName.get(normalizeAnswer(entry.vote));
-    if (!playerId) {
-      unmatched.set(entry.vote, (unmatched.get(entry.vote) ?? 0) + 1);
-      continue;
-    }
-    votes[playerId] += 1;
-    ballots.push({ discordId: entry.discordId, username: entry.username, playerId });
+    const value = read(entry.vote);
+    if (value === undefined) unmatched.set(entry.vote, (unmatched.get(entry.vote) ?? 0) + 1);
+    else matched.push({ entry, value });
   }
-  return { votes, ballots, unmatched: [...unmatched].map(([answer, count]) => ({ answer, count })), duplicates };
+  return { matched, unmatched: [...unmatched].map(([answer, count]) => ({ answer, count })), duplicates };
+}
+
+export interface MatchedVotes extends Unmatched {
+  votes: Record<PlayerId, number>;
+  ballots: Ballot[];
+}
+
+/** Matches each "who wins?" vote to one of the series' players by name. */
+export function matchVotes(series: Series, players: readonly Player[], entries: readonly VoteEntry[]): MatchedVotes {
+  const byName = new Map<string, PlayerId>();
+  for (const playerId of series.playerIds) {
+    const player = players.find((candidate) => candidate.id === playerId);
+    if (player) byName.set(normalizeAnswer(player.name), playerId);
+  }
+  const { matched, unmatched, duplicates } = matchEntries(entries, (answer) => byName.get(normalizeAnswer(answer)));
+  const votes: Record<PlayerId, number> = Object.fromEntries(series.playerIds.map((playerId) => [playerId, 0]));
+  const ballots: Ballot[] = matched.map(({ entry, value }) => {
+    votes[value] += 1;
+    return { discordId: entry.discordId, username: entry.username, playerId: value };
+  });
+  return { votes, ballots, unmatched, duplicates };
+}
+
+// Words that start an over/under answer in either language, accent-free, so
+// "Trên 2,5 ván", "over 2.5 games" and the betting slang "Tài"/"Xỉu" all work.
+const GAMES_KEYWORDS: Record<GamesPick, readonly string[]> = {
+  over: ['over', 'tren', 'tai'],
+  under: ['under', 'duoi', 'xiu'],
+};
+
+function withoutAccents(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/\p{Mark}/gu, '')
+    .replace(/đ/g, 'd');
+}
+
+/** Reads an over/under answer, or undefined when it's neither. */
+export function parseGamesPick(answer: string): GamesPick | undefined {
+  const firstWord = withoutAccents(normalizeAnswer(answer))
+    .split(/[^a-z]+/)
+    .find(Boolean);
+  if (!firstWord) return undefined;
+  return (Object.keys(GAMES_KEYWORDS) as GamesPick[]).find((pick) => GAMES_KEYWORDS[pick].includes(firstWord));
+}
+
+export interface MatchedGamesVotes extends Unmatched {
+  votes: Record<GamesPick, number>;
+  ballots: GamesBallot[];
+}
+
+export function matchGamesVotes(entries: readonly VoteEntry[]): MatchedGamesVotes {
+  const { matched, unmatched, duplicates } = matchEntries(entries, parseGamesPick);
+  const votes: Record<GamesPick, number> = { over: 0, under: 0 };
+  const ballots: GamesBallot[] = matched.map(({ entry, value }) => {
+    votes[value] += 1;
+    return { discordId: entry.discordId, username: entry.username, pick: value };
+  });
+  return { votes, ballots, unmatched, duplicates };
 }
 
 export interface VoteShare {
@@ -108,6 +158,46 @@ export function crowdFavorite(series: Series): PlayerId | undefined {
   return leaders.length === 1 ? leaders[0].playerId : undefined;
 }
 
+/** Over/under only makes sense when a series can run to different lengths. */
+export function hasGamesPrediction(series: Series): boolean {
+  return series.winsNeeded === 2;
+}
+
+/** The line for a series' games prediction: the host's, or the default. */
+export function gamesLineOf(series: Series): number {
+  return series.gamesLine ?? DEFAULT_GAMES_LINE;
+}
+
+export type GamesOutcome = GamesPick | 'push';
+
+/**
+ * How the finished series went against the recorded poll's line (or the
+ * current line). Undefined while it's running, for single matches, and when a
+ * ruling decided it: then the game count says nothing about the players.
+ */
+export function gamesOutcome(series: Series): GamesOutcome | undefined {
+  if (!hasGamesPrediction(series) || series.winnerOverride || !isSeriesComplete(series)) return undefined;
+  const line = series.gamesPoll?.line ?? gamesLineOf(series);
+  const games = series.games.length;
+  return games > line ? 'over' : games < line ? 'under' : 'push';
+}
+
+/** Over and under shares (0-100, rounded), or undefined when nobody voted. */
+export function gamesShares(series: Series): Record<GamesPick, number> | undefined {
+  const votes = series.gamesPoll?.votes;
+  const total = votes ? votes.over + votes.under : 0;
+  if (!votes || total === 0) return undefined;
+  const over = Math.round((votes.over / total) * 100);
+  return { over, under: 100 - over };
+}
+
+/** The crowd's over/under pick, or undefined when nobody voted or it's an even split. */
+export function crowdGamesPick(series: Series): GamesPick | undefined {
+  const votes = series.gamesPoll?.votes;
+  if (!votes || votes.over === votes.under) return undefined;
+  return votes.over > votes.under ? 'over' : 'under';
+}
+
 /** How often the crowd favourite went on to win, over finished series with a clear favourite. */
 export function crowdRecord(tournament: Tournament): { called: number; decided: number } {
   let called = 0;
@@ -122,33 +212,73 @@ export function crowdRecord(tournament: Tournament): { called: number; decided: 
   return { called, decided };
 }
 
+/** How often the crowd's over/under pick was right; pushes and rulings don't count. */
+export function crowdGamesRecord(tournament: Tournament): { called: number; decided: number } {
+  let called = 0;
+  let decided = 0;
+  for (const series of tournament.series) {
+    const pick = crowdGamesPick(series);
+    const outcome = gamesOutcome(series);
+    if (!pick || !outcome || outcome === 'push') continue;
+    decided += 1;
+    if (pick === outcome) called += 1;
+  }
+  return { called, decided };
+}
+
 export interface LeaderboardEntry {
   discordId: string;
   username: string;
+  winnerCorrect: number;
+  winnerPicks: number;
+  gamesCorrect: number;
+  gamesPicks: number;
   correct: number;
   picks: number;
 }
 
-/** Discord members ranked by correct picks over finished series with imported ballots. */
+/** Discord members ranked by correct picks across both predictions, over finished series with imported ballots. */
 export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[] {
   const entries = new Map<string, LeaderboardEntry>();
+  const entryFor = (discordId: string, username: string) => {
+    const entry = entries.get(discordId) ?? {
+      discordId,
+      username,
+      winnerCorrect: 0,
+      winnerPicks: 0,
+      gamesCorrect: 0,
+      gamesPicks: 0,
+      correct: 0,
+      picks: 0,
+    };
+    if (username) entry.username = username;
+    entries.set(discordId, entry);
+    return entry;
+  };
   for (const series of tournament.series) {
     const winner = seriesWinner(series);
-    if (!winner || !series.poll?.ballots) continue;
-    for (const ballot of series.poll.ballots) {
-      const entry = entries.get(ballot.discordId) ?? { discordId: ballot.discordId, username: ballot.username, correct: 0, picks: 0 };
-      entry.picks += 1;
-      if (ballot.playerId === winner) entry.correct += 1;
-      if (ballot.username) entry.username = ballot.username;
-      entries.set(ballot.discordId, entry);
+    if (winner) {
+      for (const ballot of series.poll?.ballots ?? []) {
+        const entry = entryFor(ballot.discordId, ballot.username);
+        entry.winnerPicks += 1;
+        if (ballot.playerId === winner) entry.winnerCorrect += 1;
+      }
+    }
+    const outcome = gamesOutcome(series);
+    if (outcome && outcome !== 'push') {
+      for (const ballot of series.gamesPoll?.ballots ?? []) {
+        const entry = entryFor(ballot.discordId, ballot.username);
+        entry.gamesPicks += 1;
+        if (ballot.pick === outcome) entry.gamesCorrect += 1;
+      }
     }
   }
+  for (const entry of entries.values()) {
+    entry.correct = entry.winnerCorrect + entry.gamesCorrect;
+    entry.picks = entry.winnerPicks + entry.gamesPicks;
+  }
   // Fewer picks for the same score means better accuracy, so it ranks higher.
-  return [...entries.values()].sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.username.localeCompare(b.username));
-}
-
-/** Question and answers to paste into EasyPoll's poll builder. */
-export function pollPrompt(series: Series, players: readonly Player[]): { question: string; answers: string[] } {
-  const names = series.playerIds.map((playerId) => players.find((player) => player.id === playerId)?.name ?? playerId);
-  return { question: `${series.label}: who wins?`, answers: names };
+  return [...entries.values()]
+    .filter((entry) => entry.picks > 0)
+    .sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.username.localeCompare(b.username));
 }

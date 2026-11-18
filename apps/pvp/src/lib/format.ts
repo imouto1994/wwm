@@ -1,5 +1,5 @@
 // Player-count rules. The event only runs with counts divisible by 3 between
-// 21 and 30, so every group is a full 1v1v1 and no fill-ins are ever needed.
+// 21 and 30, so every group is a full 1v1v1 and nobody plays twice in a stage.
 //
 // NOTE: modules in src/lib use relative imports with explicit `.js`
 // extensions (not the `@/` alias) because the Vercel Function in api/
@@ -11,10 +11,22 @@ export const SEMIFINALISTS = 9;
 export interface EventFormat {
   players: number;
   groups: number;
-  /** Best runners-up who fill the semifinal spots left after the group winners (21 and 24 players). */
-  runnerUpSpots: number;
-  /** 30 players: 10 group winners for 9 spots, so the weakest two meet the best runner-up in a play-in. */
-  hasPlayIn: boolean;
+  /** Semifinal spots the group winners leave empty, filled by host picks (21 → 2, 24 → 1). */
+  fillInSpots: number;
+  /** Group winners beyond the 9 semifinal spots, left out by host pick (30 → 1). */
+  dropSpots: number;
+}
+
+/**
+ * Over/under lines the host can set for the "how many games?" prediction. A
+ * first-to-2 series lasts 2 to 4 games, so 2.5 is the natural default; whole
+ * numbers are allowed and can end exactly on the line (a push).
+ */
+export const GAMES_LINE_OPTIONS = [1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
+export const DEFAULT_GAMES_LINE = 2.5;
+
+export function isValidGamesLine(line: unknown): line is number {
+  return typeof line === 'number' && Number.isFinite(line) && line >= 0.5 && line <= 10 && Number.isInteger(line * 2);
 }
 
 export function isSupportedCount(count: number): boolean {
@@ -29,7 +41,7 @@ export function formatFor(count: number): EventFormat {
   return {
     players: count,
     groups,
-    runnerUpSpots: Math.max(0, SEMIFINALISTS - groups),
-    hasPlayIn: groups > SEMIFINALISTS,
+    fillInSpots: Math.max(0, SEMIFINALISTS - groups),
+    dropSpots: Math.max(0, groups - SEMIFINALISTS),
   };
 }

@@ -56,11 +56,3 @@ export function rankRecords(records: readonly PlayerRecord[], context: string, t
   }
   return { order, ties };
 }
-
-/** Only ties that straddle a cut change who makes it; the rest don't need a draw. */
-export function tiesAcrossCut(ties: readonly Tie[], order: readonly PlayerId[], cut: number): Tie[] {
-  return ties.filter((tie) => {
-    const positions = tie.playerIds.map((playerId) => order.indexOf(playerId));
-    return positions.some((position) => position < cut) && positions.some((position) => position >= cut);
-  });
-}

@@ -1,3 +1,4 @@
+import { useI18n } from '@/hooks/useI18n';
 import type { ReactNode } from 'react';
 
 interface BannerProps {
@@ -13,6 +14,7 @@ const TONES = {
 };
 
 export function Banner({ tone, children, onDismiss }: BannerProps) {
+  const { t } = useI18n();
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
@@ -21,7 +23,7 @@ export function Banner({ tone, children, onDismiss }: BannerProps) {
       <div>{children}</div>
       {onDismiss && (
         <button type='button' onClick={onDismiss} className='text-xs text-muted hover:text-fg'>
-          Dismiss
+          {t.common.dismiss}
         </button>
       )}
     </div>

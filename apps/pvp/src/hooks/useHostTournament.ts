@@ -1,4 +1,5 @@
-import { UnauthorizedError, fetchTournament, saveTournament } from '@/lib/apiClient';
+import { UnauthorizedError, describeApiError, fetchTournament, saveTournament } from '@/lib/apiClient';
+import type { Translatable } from '@/lib/i18n';
 import { type Action, applyAction, createEmptyTournament } from '@/lib/reducer';
 import type { Tournament } from '@/types/tournament';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -6,9 +7,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type LoadStatus = 'loading' | 'ready' | 'unauthorized' | 'error';
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'unsaved';
 
+/** Rendered with the current messages, so a banner switches language along with the page. */
 export interface HostMessage {
   tone: 'error' | 'info';
-  text: string;
+  text: Translatable;
 }
 
 // Draws (groups, ties) must be unpredictable on the night; Math.random is fine
@@ -27,7 +29,7 @@ function cryptoRandom(): number {
  * saved first; the newer state replaces ours and the host is told to redo the
  * last change. Network failures keep the local state and offer a retry.
  */
-export function useHostTournament(pin: string | null) {
+export function useHostTournament(pin: string | null, defaultEventName: string) {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -37,6 +39,9 @@ export function useHostTournament(pin: string | null) {
   const serverVersion = useRef(0);
   const saving = useRef(false);
   const pendingAgain = useRef(false);
+  // Only used to name a brand-new tournament; a ref so switching language never triggers a reload.
+  const defaultName = useRef(defaultEventName);
+  defaultName.current = defaultEventName;
 
   const show = useCallback((next: Tournament) => {
     latest.current = next;
@@ -49,12 +54,12 @@ export function useHostTournament(pin: string | null) {
     try {
       const stored = await fetchTournament({ pin });
       serverVersion.current = stored?.version ?? 0;
-      show(stored ?? createEmptyTournament());
+      show(stored ?? createEmptyTournament(defaultName.current));
       setLoadStatus('ready');
       setSaveStatus('idle');
     } catch (error) {
       setLoadStatus(error instanceof UnauthorizedError ? 'unauthorized' : 'error');
-      setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not load the tournament.' });
+      setMessage({ tone: 'error', text: describeApiError(error) });
     }
   }, [pin, show]);
 
@@ -86,11 +91,11 @@ export function useHostTournament(pin: string | null) {
           serverVersion.current = newer.version;
           show(newer);
           setSaveStatus('saved');
-          setMessage({ tone: 'error', text: 'Another tab saved a newer version, so it was loaded here. Please redo your last change.' });
+          setMessage({ tone: 'error', text: (t) => t.console.conflict });
           break;
         } else {
           setSaveStatus('unsaved');
-          setMessage({ tone: 'error', text: outcome.message });
+          setMessage({ tone: 'error', text: describeApiError(outcome.error) });
           if (outcome.kind === 'unauthorized') setLoadStatus('unauthorized');
           break;
         }
@@ -122,7 +127,7 @@ export function useHostTournament(pin: string | null) {
   const replace = useCallback(
     (next: Tournament) => {
       show(next);
-      setMessage({ tone: 'info', text: 'Restored. The restored state is now the latest version.' });
+      setMessage({ tone: 'info', text: (t) => t.console.restored });
       void persist();
     },
     [persist, show]

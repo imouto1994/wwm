@@ -1,9 +1,10 @@
 import { Button } from '@/components/Button';
 import type { HostController } from '@/hooks/useHostTournament';
-import { fetchHistory } from '@/lib/apiClient';
-import { STAGE_LABELS, nameLookup } from '@/lib/names';
+import { useI18n } from '@/hooks/useI18n';
+import { describeApiError, fetchHistory } from '@/lib/apiClient';
+import { type Translatable, formatClockTime } from '@/lib/i18n';
+import { nameLookup } from '@/lib/names';
 import { playableSeries, replacementCandidates } from '@/lib/reducer';
-import { formatClockTime } from '@/lib/time';
 import type { Tournament } from '@/types/tournament';
 import { Download, History } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -37,6 +38,7 @@ function downloadJson(tournament: Tournament) {
 
 /** Rarely needed corrections, kept out of the way in a collapsed panel. */
 export function HostTools({ host, tournament, pin }: HostToolsProps) {
+  const { t, locale } = useI18n();
   const nameOf = nameLookup(tournament);
   const series = playableSeries(tournament);
   const [overrideSeriesId, setOverrideSeriesId] = useState('');
@@ -48,7 +50,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const [renameId, setRenameId] = useState('');
   const [newName, setNewName] = useState('');
   const [history, setHistory] = useState<Tournament[] | null>(null);
-  const [historyError, setHistoryError] = useState('');
+  const [historyError, setHistoryError] = useState<Translatable>();
   const [resetText, setResetText] = useState('');
 
   const overrideSeries = series.find((entry) => entry.id === overrideSeriesId);
@@ -57,20 +59,20 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const candidates = replaceSeries && outId ? replacementCandidates(tournament, replaceSeries.id, outId) : [];
 
   async function loadHistory() {
-    setHistoryError('');
+    setHistoryError(undefined);
     try {
       setHistory(await fetchHistory(pin));
     } catch (error) {
-      setHistoryError(error instanceof Error ? error.message : 'Could not load history.');
+      setHistoryError(() => describeApiError(error));
     }
   }
 
   return (
     <details className='rounded-lg border border-border bg-surface p-4'>
-      <summary className='cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted'>Host tools</summary>
+      <summary className='cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted'>{t.tools.title}</summary>
       <div className='mt-4 flex flex-col gap-4'>
         {series.length > 0 && (
-          <Tool title='Override a series winner' description='For forfeits, no-shows or a disconnect ruling. Viewers see the reason.'>
+          <Tool title={t.tools.overrideTitle} description={t.tools.overrideHelp}>
             <select
               value={overrideSeriesId}
               onChange={(event) => {
@@ -79,43 +81,40 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               }}
               className={inputClass}
             >
-              <option value=''>Series…</option>
+              <option value=''>{t.tools.series}</option>
               {series.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.label}
+                  {t.seriesName(entry)}
                 </option>
               ))}
             </select>
             <select value={overridePlayerId} onChange={(event) => setOverridePlayerId(event.target.value)} className={inputClass} disabled={!overrideSeries}>
-              <option value=''>Winner…</option>
+              <option value=''>{t.tools.winner}</option>
               {overrideSeries?.playerIds.map((playerId) => (
                 <option key={playerId} value={playerId}>
                   {nameOf(playerId)}
                 </option>
               ))}
             </select>
-            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder='Reason, e.g. forfeit' className={inputClass} />
+            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t.tools.reason} className={inputClass} />
             <Button
               disabled={!overrideSeries || !overridePlayerId || !reason.trim()}
               onClick={() => {
                 if (host.dispatch({ type: 'overrideWinner', seriesId: overrideSeriesId, playerId: overridePlayerId, reason })) setReason('');
               }}
             >
-              Apply
+              {t.tools.apply}
             </Button>
             {overrideSeries?.winnerOverride && (
               <Button variant='danger' onClick={() => host.dispatch({ type: 'clearOverride', seriesId: overrideSeriesId })}>
-                Remove override
+                {t.tools.removeOverride}
               </Button>
             )}
           </Tool>
         )}
 
         {replaceable.length > 0 && (
-          <Tool
-            title='Replace a player'
-            description='For a semifinalist or finalist who has to leave before their series starts. Candidates are listed best first by the rules.'
-          >
+          <Tool title={t.tools.replaceTitle} description={t.tools.replaceHelp}>
             <select
               value={replaceSeriesId}
               onChange={(event) => {
@@ -125,10 +124,10 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               }}
               className={inputClass}
             >
-              <option value=''>Series…</option>
+              <option value=''>{t.tools.series}</option>
               {replaceable.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.label}
+                  {t.seriesName(entry)}
                 </option>
               ))}
             </select>
@@ -141,7 +140,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               className={inputClass}
               disabled={!replaceSeries}
             >
-              <option value=''>Leaving…</option>
+              <option value=''>{t.tools.leaving}</option>
               {replaceSeries?.playerIds.map((playerId) => (
                 <option key={playerId} value={playerId}>
                   {nameOf(playerId)}
@@ -149,21 +148,21 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               ))}
             </select>
             <select value={inId} onChange={(event) => setInId(event.target.value)} className={inputClass} disabled={candidates.length === 0}>
-              <option value=''>Replacement…</option>
+              <option value=''>{t.tools.replacement}</option>
               {candidates.map((playerId, index) => (
                 <option key={playerId} value={playerId}>
-                  {index === 0 ? `${nameOf(playerId)} (suggested)` : nameOf(playerId)}
+                  {index === 0 ? t.tools.suggested(nameOf(playerId)) : nameOf(playerId)}
                 </option>
               ))}
             </select>
             <Button disabled={!inId} onClick={() => host.dispatch({ type: 'replacePlayer', seriesId: replaceSeriesId, outId, inId })}>
-              Replace
+              {t.tools.replace}
             </Button>
           </Tool>
         )}
 
         {tournament.players.length > 0 && (
-          <Tool title='Fix a player’s name' description='Typos only; results stay attached to the player.'>
+          <Tool title={t.tools.renameTitle} description={t.tools.renameHelp}>
             <select
               value={renameId}
               onChange={(event) => {
@@ -172,7 +171,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               }}
               className={inputClass}
             >
-              <option value=''>Player…</option>
+              <option value=''>{t.tools.player}</option>
               {tournament.players.map((player) => (
                 <option key={player.id} value={player.id}>
                   {player.name}
@@ -181,45 +180,48 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
             </select>
             <input value={newName} onChange={(event) => setNewName(event.target.value)} className={inputClass} disabled={!renameId} />
             <Button disabled={!renameId || !newName.trim()} onClick={() => host.dispatch({ type: 'renamePlayer', playerId: renameId, name: newName })}>
-              Rename
+              {t.tools.rename}
             </Button>
           </Tool>
         )}
 
         {tournament.stage !== 'setup' && (
-          <Tool title='Go back a stage' description='Removes the current stage’s series (and their results) and reopens the previous stage for corrections.'>
+          <Tool title={t.tools.reopenTitle} description={t.tools.reopenHelp}>
             <Button
               variant='danger'
               onClick={() => {
-                if (window.confirm(`Go back from ${STAGE_LABELS[tournament.stage]}? Series created for this stage are removed.`))
-                  host.dispatch({ type: 'reopenStage' });
+                if (window.confirm(t.tools.reopenConfirm(t.stages[tournament.stage]))) host.dispatch({ type: 'reopenStage' });
               }}
             >
-              Reopen previous stage
+              {t.tools.reopen}
             </Button>
           </Tool>
         )}
 
-        <Tool title='Restore an earlier save' description='The server keeps the last 50 saves. Restoring makes that state the newest version.'>
+        <Tool title={t.tools.restoreTitle} description={t.tools.restoreHelp}>
           <Button onClick={loadHistory}>
-            <History size={14} /> Load saves
+            <History size={14} /> {t.tools.loadSaves}
           </Button>
-          {historyError && <span className='text-sm text-red'>{historyError}</span>}
+          {historyError && <span className='text-sm text-red'>{historyError(t)}</span>}
           {history && (
             <ul className='flex w-full flex-col gap-1 text-sm'>
-              {history.length === 0 && <li className='text-muted'>No saves yet.</li>}
+              {history.length === 0 && <li className='text-muted'>{t.tools.noSaves}</li>}
               {history.map((entry) => (
                 <li key={entry.version} className='flex items-center justify-between gap-2'>
                   <span className='text-muted'>
-                    v{entry.version} · {STAGE_LABELS[entry.stage]} · {entry.series.reduce((sum, item) => sum + item.games.length, 0)} games ·{' '}
-                    {formatClockTime(entry.updatedAt)}
+                    {t.tools.historyEntry(
+                      entry.version,
+                      t.stages[entry.stage],
+                      entry.series.reduce((sum, item) => sum + item.games.length, 0),
+                      formatClockTime(entry.updatedAt, locale)
+                    )}
                   </span>
                   <Button
                     onClick={() => {
-                      if (window.confirm(`Restore version ${entry.version}?`)) host.replace(entry);
+                      if (window.confirm(t.tools.restoreConfirm(entry.version))) host.replace(entry);
                     }}
                   >
-                    Restore
+                    {t.tools.restore}
                   </Button>
                 </li>
               ))}
@@ -227,13 +229,13 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
           )}
         </Tool>
 
-        <Tool title='Export' description='Download the full tournament as JSON, for a backup at the end of each stage.'>
+        <Tool title={t.tools.exportTitle} description={t.tools.exportHelp}>
           <Button onClick={() => downloadJson(tournament)}>
-            <Download size={14} /> Download JSON
+            <Download size={14} /> {t.tools.download}
           </Button>
         </Tool>
 
-        <Tool title='Reset the tournament' description='Clears players, groups and results. Type RESET to confirm. Earlier saves stay restorable.'>
+        <Tool title={t.tools.resetTitle} description={t.tools.resetHelp}>
           <input value={resetText} onChange={(event) => setResetText(event.target.value)} placeholder='RESET' className={inputClass} />
           <Button
             variant='danger'
@@ -242,7 +244,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               if (host.dispatch({ type: 'reset' })) setResetText('');
             }}
           >
-            Reset
+            {t.tools.reset}
           </Button>
         </Tool>
       </div>

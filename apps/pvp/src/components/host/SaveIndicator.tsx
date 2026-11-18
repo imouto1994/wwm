@@ -1,4 +1,5 @@
 import type { SaveStatus } from '@/hooks/useHostTournament';
+import { useI18n } from '@/hooks/useI18n';
 
 interface SaveIndicatorProps {
   status: SaveStatus;
@@ -6,16 +7,17 @@ interface SaveIndicatorProps {
 }
 
 export function SaveIndicator({ status, onRetry }: SaveIndicatorProps) {
-  if (status === 'saving') return <span className='text-xs text-gold'>Saving…</span>;
+  const { t } = useI18n();
+  if (status === 'saving') return <span className='text-xs text-gold'>{t.save.saving}</span>;
   if (status === 'unsaved') {
     return (
       <span className='flex items-center gap-2 text-xs text-red'>
-        Not saved
+        {t.save.notSaved}
         <button type='button' onClick={onRetry} className='rounded border border-red/50 px-2 py-0.5 hover:bg-red/10'>
-          Retry
+          {t.save.retry}
         </button>
       </span>
     );
   }
-  return <span className='text-xs text-muted'>{status === 'saved' ? 'All changes saved' : 'Up to date'}</span>;
+  return <span className='text-xs text-muted'>{status === 'saved' ? t.save.saved : t.save.upToDate}</span>;
 }

@@ -1,12 +1,14 @@
 import { Button } from '@/components/Button';
+import { SemifinalPicker } from '@/components/host/SemifinalPicker';
 import type { HostController } from '@/hooks/useHostTournament';
-import { formatFor } from '@/lib/format';
+import { useI18n } from '@/hooks/useI18n';
+import type { Messages } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
-import { groupSeries, groupStageOutcome, pendingTies, seedingOrder, semifinalistsOf } from '@/lib/qualification';
+import { groupSeries, groupStageOutcome, pendingTies, seedingOrder, semifinalSelection } from '@/lib/qualification';
 import { championOf, nextStage, playableSeries } from '@/lib/reducer';
 import { seedSemifinalGroups } from '@/lib/seeding';
 import { seriesWinner } from '@/lib/series';
-import type { PlayerId, Stage, Tournament } from '@/types/tournament';
+import type { PlayerId, Tournament } from '@/types/tournament';
 import { ChevronRight, Dice5 } from 'lucide-react';
 
 interface StageGateProps {
@@ -14,31 +16,14 @@ interface StageGateProps {
   tournament: Tournament;
 }
 
-const ADVANCE_LABELS: Partial<Record<Stage, string>> = {
-  playIn: 'Start the play-in',
-  semis: 'Seed and start the semifinals',
-  final: 'Start the grand final',
-  done: 'Finish the tournament',
-};
-
-/** Readable name for a tie, from its key ("runnerUp:G3:p1,p7" → "Runner-up of Group 3"). */
-function tieContext(key: string, tournament: Tournament): string {
+/** Readable name for a tie, from its key ("seeding:p1,p7" → "Semifinal seeding"). */
+function tieContext(key: string, t: Messages): string {
   const context = key.slice(0, key.lastIndexOf(':'));
-  if (context.startsWith('runnerUp:')) {
-    const seriesId = context.split(':')[1];
-    return `Runner-up of ${tournament.series.find((series) => series.id === seriesId)?.label ?? seriesId}`;
-  }
-  if (context === 'runnersUp') return 'Best runners-up';
-  if (context === 'winners') return 'Weakest group winners (play-in)';
-  if (context === 'seeding') return 'Semifinal seeding';
-  return context;
+  return context === 'seeding' ? t.gate.seedingTie : context;
 }
 
 /** The semifinal groups that advancing would create, shown before the host commits. */
-function semifinalPreview(tournament: Tournament): PlayerId[][] | undefined {
-  let semifinalists: PlayerId[] | undefined;
-  if (tournament.stage === 'groups' && !formatFor(tournament.players.length).hasPlayIn) semifinalists = groupStageOutcome(tournament).qualifiers;
-  if (tournament.stage === 'playIn') semifinalists = semifinalistsOf(tournament);
+function semifinalPreview(tournament: Tournament, semifinalists: PlayerId[] | undefined): PlayerId[][] | undefined {
   if (!semifinalists || semifinalists.length !== 9) return undefined;
   const seeding = seedingOrder(tournament, semifinalists);
   if (seeding.ties.length > 0) return undefined;
@@ -47,52 +32,58 @@ function semifinalPreview(tournament: Tournament): PlayerId[][] | undefined {
 }
 
 /**
- * Shown once every series in the stage is finished: who goes through, any
- * ties that need an on-screen draw, the late-running rule, and the button to
- * move on. Advancing is blocked until all ties are drawn.
+ * Shown once every series in the stage is finished: who goes through, the
+ * host's semifinal picks (21, 24 and 30 players), any seeding ties that need
+ * an on-screen draw, the late-running rule, and the button to move on.
  */
 export function StageGate({ host, tournament }: StageGateProps) {
+  const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   const ties = pendingTies(tournament);
   const next = nextStage(tournament);
-  const advanceLabel = next ? ADVANCE_LABELS[next] : undefined;
-  const preview = ties.length === 0 ? semifinalPreview(tournament) : undefined;
-  const lateRuleEditable = tournament.stage === 'groups' || tournament.stage === 'playIn';
+  const advanceLabel = next ? t.gate.advance[next] : undefined;
+  const isGroupStage = tournament.stage === 'groups';
+  const selection = isGroupStage ? semifinalSelection(tournament) : undefined;
+  const picksMissing = Boolean(selection && !selection.semifinalists);
+  const preview = isGroupStage && ties.length === 0 ? semifinalPreview(tournament, selection?.semifinalists) : undefined;
   const recentDraws = tournament.tieDraws.slice(-4).reverse();
 
   let summary: string | undefined;
-  if (tournament.stage === 'groups' && ties.length === 0) {
-    const outcome = groupStageOutcome(tournament);
-    summary = outcome.playIn.length
-      ? `Straight through: ${outcome.qualifiers.map(nameOf).join(', ')}. Play-in: ${outcome.playIn.map(nameOf).join(', ')}.`
-      : `Through to the semifinals: ${outcome.qualifiers.map(nameOf).join(', ')}.`;
+  if (isGroupStage) {
+    summary = selection?.semifinalists
+      ? t.gate.throughSemis(selection.semifinalists.map(nameOf).join(', '))
+      : t.gate.groupWinners(groupStageOutcome(tournament).winners.map(nameOf).join(', '));
   } else if (tournament.stage === 'semis') {
-    summary = `Grand finalists: ${playableSeries(tournament)
-      .map((series) => nameOf(seriesWinner(series) ?? ''))
-      .join(', ')}.`;
+    summary = t.gate.finalists(
+      playableSeries(tournament)
+        .map((series) => nameOf(seriesWinner(series) ?? ''))
+        .join(', ')
+    );
   } else if (tournament.stage === 'final') {
     const champion = championOf(tournament);
-    summary = champion ? `${nameOf(champion)} wins the tournament.` : undefined;
+    summary = champion ? t.gate.championWins(nameOf(champion)) : undefined;
   }
 
   return (
     <div className='flex flex-col gap-4 rounded-lg border border-gold/50 bg-surface p-4'>
-      <h3 className='font-semibold text-gold'>Stage complete</h3>
+      <h3 className='font-semibold text-gold'>{t.gate.complete}</h3>
       {summary && <p className='text-sm text-fg'>{summary}</p>}
+
+      {selection && <SemifinalPicker host={host} tournament={tournament} selection={selection} />}
 
       {ties.length > 0 && (
         <div className='flex flex-col gap-2'>
-          <p className='text-sm text-fg'>These players are level on wins and points per game, so a random draw decides:</p>
+          <p className='text-sm text-fg'>{t.gate.tiesIntro}</p>
           <ul className='flex flex-col gap-1 text-sm text-muted'>
             {ties.map((tie) => (
               <li key={tie.key}>
-                <span className='text-fg'>{tieContext(tie.key, tournament)}:</span> {tie.playerIds.map(nameOf).join(', ')}
+                <span className='text-fg'>{tieContext(tie.key, t)}:</span> {tie.playerIds.map(nameOf).join(', ')}
               </li>
             ))}
           </ul>
           <div>
             <Button variant='primary' onClick={() => host.dispatch({ type: 'resolveTies' })}>
-              <Dice5 size={16} /> Draw to break the ties
+              <Dice5 size={16} /> {t.gate.drawTies}
             </Button>
           </div>
         </div>
@@ -100,10 +91,10 @@ export function StageGate({ host, tournament }: StageGateProps) {
 
       {recentDraws.length > 0 && (
         <div className='flex flex-col gap-1 text-xs text-muted'>
-          <p className='font-semibold uppercase tracking-wide'>Recent draws</p>
+          <p className='font-semibold uppercase tracking-wide'>{t.gate.recentDraws}</p>
           {recentDraws.map((draw) => (
             <p key={draw.key}>
-              {tieContext(draw.key, tournament)}: {draw.order.map(nameOf).join(' > ')}
+              {tieContext(draw.key, t)}: {draw.order.map(nameOf).join(' > ')}
             </p>
           ))}
         </div>
@@ -111,16 +102,16 @@ export function StageGate({ host, tournament }: StageGateProps) {
 
       {preview && (
         <div className='flex flex-col gap-1 text-sm'>
-          <p className='text-muted'>Semifinal groups (seeded):</p>
+          <p className='text-muted'>{t.gate.preview}</p>
           {preview.map((group, index) => (
             <p key={group.join()} className='text-fg'>
-              Semifinal {index + 1}: {group.map(nameOf).join(', ')}
+              {t.seriesName({ id: `S${index + 1}`, stage: 'semi' })}: {group.map(nameOf).join(', ')}
             </p>
           ))}
         </div>
       )}
 
-      {lateRuleEditable && (
+      {isGroupStage && (
         <label className='flex items-start gap-2 text-sm text-fg'>
           <input
             type='checkbox'
@@ -129,15 +120,15 @@ export function StageGate({ host, tournament }: StageGateProps) {
             className='mt-0.5'
           />
           <span>
-            Late-running rule: semifinals are one match each
-            <span className='block text-xs text-muted'>Use it if the break ends late. The grand final always stays first to 2.</span>
+            {t.gate.lateRule}
+            <span className='block text-xs text-muted'>{t.gate.lateRuleHelp}</span>
           </span>
         </label>
       )}
 
       {advanceLabel && (
         <div>
-          <Button variant='primary' onClick={() => host.dispatch({ type: 'advance' })} disabled={ties.length > 0}>
+          <Button variant='primary' onClick={() => host.dispatch({ type: 'advance' })} disabled={ties.length > 0 || picksMissing}>
             {advanceLabel} <ChevronRight size={16} />
           </Button>
         </div>

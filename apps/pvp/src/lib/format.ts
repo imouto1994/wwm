@@ -5,6 +5,8 @@
 // extensions (not the `@/` alias) because the Vercel Function in api/
 // imports them too, and Node's ESM loader needs real relative paths.
 
+import type { SeriesStage } from '../types/tournament.js';
+
 export const SUPPORTED_COUNTS = [21, 24, 27, 30] as const;
 export const SEMIFINALISTS = 9;
 
@@ -17,13 +19,23 @@ export interface EventFormat {
   dropSpots: number;
 }
 
+/** Game wins needed to take a series in each phase: first to 2, except a first-to-3 grand final. */
+export const WINS_NEEDED: Record<SeriesStage, 2 | 3> = { group: 2, semi: 2, final: 3 };
+
 /**
- * Over/under lines the host can set for the "how many games?" prediction. A
- * first-to-2 series lasts 2 to 4 games, so 2.5 is the natural default; whole
- * numbers are allowed and can end exactly on the line (a push).
+ * Fixed over/under lines for the "how many games?" prediction, chosen so the
+ * two answers are as close to a coin flip as possible. With three players, a
+ * first-to-2 series lasts 2 to 4 games and a first-to-3 final 3 to 7. Under
+ * the event plan's skill model (200,000 simulated events) the splits are:
+ *   group stage, first to 2, line 2.5: 48% under / 52% over (3.5 would be 88% under)
+ *   semifinals,  first to 2, line 2.5: 49% / 51%
+ *   grand final, first to 3, line 4.5: 47% / 53% (5.5 would be 76% under)
+ * Across the range from evenly matched to one clear favourite these lines stay
+ * between 33% and 53% under, closer to even than any other half-line. Half
+ * lines also mean no vote is ever voided by a game count landing on the line;
+ * whole numbers (3, or 5 for the final) would void 27-44% of votes that way.
  */
-export const GAMES_LINE_OPTIONS = [1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
-export const DEFAULT_GAMES_LINE = 2.5;
+export const GAMES_LINES: Record<SeriesStage, number> = { group: 2.5, semi: 2.5, final: 4.5 };
 
 export function isValidGamesLine(line: unknown): line is number {
   return typeof line === 'number' && Number.isFinite(line) && line >= 0.5 && line <= 10 && Number.isInteger(line * 2);

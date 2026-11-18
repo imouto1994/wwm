@@ -106,7 +106,7 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
   check(isString(value.id) && value.id, `${path}.id is missing.`);
   check(isString(value.stage) && (SERIES_STAGES as readonly string[]).includes(value.stage), `${path}.stage is invalid.`);
   check(isString(value.label), `${path}.label is missing.`);
-  check(value.winsNeeded === 1 || value.winsNeeded === 2, `${path}.winsNeeded must be 1 or 2.`);
+  check(value.winsNeeded === 1 || value.winsNeeded === 2 || value.winsNeeded === 3, `${path}.winsNeeded must be 1, 2 or 3.`);
   const winsNeeded = value.winsNeeded;
   check(Array.isArray(value.playerIds) && value.playerIds.length === 3, `${path}.playerIds must list three players.`);
   const playerIds = value.playerIds;
@@ -137,8 +137,7 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
     winnerOverride = { playerId: override.playerId, reason: override.reason };
   }
   const poll = value.poll === undefined ? undefined : parsePoll(value.poll, `${path}.poll`, playerIds);
-  check(value.gamesLine === undefined || isValidGamesLine(value.gamesLine), `${path}.gamesLine must be a multiple of 0.5 between 0.5 and 10.`);
-  const gamesLine = value.gamesLine;
+  // Documents from before the lines were fixed may still carry a `gamesLine`; like any unknown key, it's dropped.
   const gamesPoll = value.gamesPoll === undefined ? undefined : parseGamesPoll(value.gamesPoll, `${path}.gamesPoll`);
 
   return {
@@ -151,7 +150,6 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
     ...(isString(value.startedAt) ? { startedAt: value.startedAt } : {}),
     ...(winnerOverride ? { winnerOverride } : {}),
     ...(poll ? { poll } : {}),
-    ...(typeof gamesLine === 'number' ? { gamesLine } : {}),
     ...(gamesPoll ? { gamesPoll } : {}),
   };
 }

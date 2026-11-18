@@ -1,6 +1,6 @@
 import type { Ballot, GamesBallot, GamesPick, Placement, PlayerId, Series, SeriesStage, Stage, TieDraw, Tournament } from '../types/tournament.js';
 import { type Random, drawGroupSeries, shuffle } from './draw.js';
-import { SUPPORTED_COUNTS, formatFor, isSupportedCount, isValidGamesLine } from './format.js';
+import { SUPPORTED_COUNTS, WINS_NEEDED, formatFor, isSupportedCount } from './format.js';
 import type { Translatable } from './i18n.js';
 import { gamesLineOf, hasGamesPrediction } from './polls.js';
 import { groupSeries, groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom } from './qualification.js';
@@ -45,7 +45,6 @@ export type Action =
   | { type: 'resetSemifinalDraft' }
   | { type: 'recordPoll'; seriesId: string; votes: Record<PlayerId, number>; ballots?: Ballot[] }
   | { type: 'clearPoll'; seriesId: string }
-  | { type: 'setGamesLine'; seriesId: string; line: number }
   | { type: 'recordGamesPoll'; seriesId: string; votes: Record<GamesPick, number>; ballots?: GamesBallot[] }
   | { type: 'clearGamesPoll'; seriesId: string }
   | { type: 'resolveTies' }
@@ -239,7 +238,7 @@ function advance(tournament: Tournament): ActionResult {
       stage: 'final',
       label: 'Grand final',
       playerIds: winners as [PlayerId, PlayerId, PlayerId],
-      winsNeeded: 2,
+      winsNeeded: WINS_NEEDED.final,
       games: [],
     };
     return ok({ ...tournament, stage: 'final', series: [...tournament.series, final], currentSeriesId: undefined });
@@ -309,20 +308,6 @@ function gamesSeriesOrError(tournament: Tournament, seriesId: string): Series | 
   if (!series) return (t) => t.errors.unknownSeries(seriesId);
   if (!hasGamesPrediction(series)) return (t) => t.errors.singleMatchNoGames(t.seriesName(series));
   return series;
-}
-
-function setGamesLine(tournament: Tournament, seriesId: string, line: number): ActionResult {
-  const series = gamesSeriesOrError(tournament, seriesId);
-  if (typeof series === 'function') return fail(series);
-  if (!isValidGamesLine(line)) return fail((t) => t.errors.invalidLine);
-  // Votes recorded against another line no longer answer the question being asked.
-  return ok(
-    withSeries(tournament, series.id, ({ gamesPoll, ...rest }) => ({
-      ...rest,
-      gamesLine: line,
-      ...(gamesPoll && gamesPoll.line === line ? { gamesPoll } : {}),
-    }))
-  );
 }
 
 function recordGamesPoll(
@@ -483,9 +468,6 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       if (!series) return fail((t) => t.errors.unknownSeries(action.seriesId));
       return ok(withSeries(tournament, series.id, ({ poll: _cleared, ...rest }) => rest));
     }
-
-    case 'setGamesLine':
-      return setGamesLine(tournament, action.seriesId, action.line);
 
     case 'recordGamesPoll':
       return recordGamesPoll(tournament, action.seriesId, action.votes, action.ballots, context.now);

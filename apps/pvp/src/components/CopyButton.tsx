@@ -4,14 +4,12 @@ import { useState } from 'react';
 
 interface CopyButtonProps {
   text: string;
-  /** Runs after a successful copy, e.g. to lock in the line the host just posted. */
-  onCopy?: () => void;
 }
 
 // navigator.clipboard needs a secure context (https or localhost). Elsewhere
 // the button just reports that copying failed, and the text stays visible on
 // screen for a manual copy.
-export function CopyButton({ text, onCopy }: CopyButtonProps) {
+export function CopyButton({ text }: CopyButtonProps) {
   const { t } = useI18n();
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -19,7 +17,6 @@ export function CopyButton({ text, onCopy }: CopyButtonProps) {
     try {
       await navigator.clipboard.writeText(text);
       setState('copied');
-      onCopy?.();
     } catch {
       setState('failed');
     }

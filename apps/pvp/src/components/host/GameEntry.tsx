@@ -43,7 +43,7 @@ export function GameEntry({ host, tournament, series }: GameEntryProps) {
     host.dispatch({ type: 'saveGame', seriesId: series.id, placement });
   }
 
-  const length = series.winsNeeded === 1 ? t.common.oneMatch : t.common.firstTo2;
+  const length = series.winsNeeded === 1 ? t.common.oneMatch : t.common.firstTo(series.winsNeeded);
   const progress = winner ? t.entry.finished : series.winsNeeded === 1 ? undefined : t.entry.game(series.games.length + 1);
 
   return (

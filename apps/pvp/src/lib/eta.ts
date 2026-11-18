@@ -24,19 +24,36 @@ export function averageGameMinutes(tournament: Tournament): number | undefined {
 }
 
 /**
- * Expected games left in a series, assuming evenly matched players. From
- * 0-0-0 a first-to-2 series lasts 2.89 games on average; each state below
- * follows from "each player wins a game with probability 1/3".
+ * Expected games left from a win count, assuming evenly matched players (each
+ * wins a game with probability 1/3): one more game, plus the average over its
+ * three possible winners. From 0-0-0 a first-to-2 series lasts 2.89 games on
+ * average and a first-to-3 final 5.05.
  */
+function expectedGamesLeft(wins: readonly number[], winsNeeded: number, memo: Map<string, number>): number {
+  if (wins.some((count) => count >= winsNeeded)) return 0;
+  const key = [...wins].sort().join(',');
+  const known = memo.get(key);
+  if (known !== undefined) return known;
+  const value =
+    1 +
+    wins.reduce(
+      (sum, _count, index) =>
+        sum +
+        expectedGamesLeft(
+          wins.map((count, i) => (i === index ? count + 1 : count)),
+          winsNeeded,
+          memo
+        ) /
+          3,
+      0
+    );
+  memo.set(key, value);
+  return value;
+}
+
 export function expectedRemainingGames(series: Series): number {
   if (isSeriesComplete(series)) return 0;
-  if (series.winsNeeded === 1) return 1;
-  const wins = seriesWins(series);
-  const ones = wins.filter((count) => count === 1).length;
-  if (ones === 0) return 26 / 9;
-  if (ones === 1) return 17 / 9;
-  if (ones === 2) return 4 / 3;
-  return 1;
+  return expectedGamesLeft(seriesWins(series), series.winsNeeded, new Map());
 }
 
 /** Minutes until the current series is likely to finish, or undefined without enough data. */

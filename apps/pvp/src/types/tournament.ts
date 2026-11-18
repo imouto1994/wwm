@@ -49,7 +49,7 @@ export interface GamesBallot {
 
 /** EasyPoll result for "over or under N games?". */
 export interface GamesPoll {
-  /** The line voters saw, kept with the result so a later line change can't reinterpret old votes. */
+  /** The line voters saw, kept with the result so changing the fixed lines later can't reinterpret old votes. */
   line: number;
   votes: Record<GamesPick, number>;
   ballots?: GamesBallot[];
@@ -63,16 +63,15 @@ export interface Series {
   /** English name ("Group 3"), kept in the document; screens show the localized name from `id` and `stage` instead. */
   label: string;
   playerIds: [PlayerId, PlayerId, PlayerId];
-  /** 2 = first to 2 wins; 1 = a single match (late-running semifinals). */
-  winsNeeded: 1 | 2;
+  /** 2 = first to 2 wins (groups, semifinals); 3 = first to 3 (grand final); 1 = a single match (late-running semifinals). */
+  winsNeeded: 1 | 2 | 3;
   games: Game[];
   /** Set when the host taps Start; marks the series as live for viewers. */
   startedAt?: string;
   /** A host ruling (forfeit, disconnect) that decides the series regardless of games. */
   winnerOverride?: { playerId: PlayerId; reason: string };
   poll?: Poll;
-  /** Over/under line for the games prediction, set by the host (default 2.5 when unset). First-to-2 series only. */
-  gamesLine?: number;
+  /** Over/under result; the line is fixed per phase (see GAMES_LINES) and copied into the poll when recorded. */
   gamesPoll?: GamesPoll;
 }
 

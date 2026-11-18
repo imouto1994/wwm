@@ -1,7 +1,7 @@
 import { useI18n } from '@/hooks/useI18n';
 import type { Messages } from '@/lib/i18n';
 import { crowdFavorite, crowdGamesPick, gamesLineOf, gamesOutcome, gamesShares, hasGamesPrediction, voteShares } from '@/lib/polls';
-import { seriesWinner, seriesWins } from '@/lib/series';
+import { isSeriesComplete, seriesWinner, seriesWins } from '@/lib/series';
 import type { PlayerId, Series } from '@/types/tournament';
 import { Crown, Radio } from 'lucide-react';
 
@@ -25,10 +25,10 @@ function statusOf(series: Series, live: boolean, t: Messages): { text: string; c
   return { text: t.card.upcoming, className: 'text-muted', isLive: false };
 }
 
-/** The over/under line for a series: the line, how Discord voted, and how it ended. Shown once the host has set a line or recorded votes. */
+/** The over/under line for a series: the fixed line, how Discord voted, and how it ended. Finished series only show it if votes were recorded. */
 function GamesLine({ series }: { series: Series }) {
   const { t, decimal } = useI18n();
-  if (!hasGamesPrediction(series) || (series.gamesLine === undefined && !series.gamesPoll)) return null;
+  if (!hasGamesPrediction(series) || (!series.gamesPoll && isSeriesComplete(series))) return null;
   const line = series.gamesPoll?.line ?? gamesLineOf(series);
   const shares = gamesShares(series);
   const crowdPick = crowdGamesPick(series);
@@ -72,7 +72,7 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
         <span className={`flex items-center gap-1 text-xs ${status.className}`}>
           {status.isLive && <Radio size={12} />}
           {status.text}
-          <span className='text-muted'>· {series.winsNeeded === 1 ? t.common.oneMatch : t.common.firstTo2}</span>
+          <span className='text-muted'>· {series.winsNeeded === 1 ? t.common.oneMatch : t.common.firstTo(series.winsNeeded)}</span>
         </span>
       </div>
       <ul className='flex flex-col gap-1.5'>

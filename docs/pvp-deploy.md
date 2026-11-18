@@ -232,7 +232,7 @@ In **Vercel → Deployments**, open the **Preview** for `pvp-rehearsal` and clic
 ### 8.2 Rehearsal script
 
 1. `/host` → PIN → paste **21 test names**, one per line → **Save** → **Draw groups** → swap two players (tap one, then one in another group) → **Start the group stage**.
-2. **Group 1:** **Show as live** → copy the winner poll's question and answers, then pick an over/under line and copy that question too → post both as real EasyPolls in a test Discord channel → vote from 2–3 accounts.
+2. **Group 1:** **Show as live** → copy the winner poll's question and answers, then the over/under question (its line is fixed: 2.5 here) → post both as real EasyPolls in a test Discord channel → vote from 2–3 accounts.
 3. Record 2–3 games (tap winner, tap runner-up, **Save game**), including one **Undo last game**.
 4. **Import votes:** EasyPoll dashboard → the poll's votes → open the Chrome console → paste [`scripts/easypoll/easypoll-devtools.js`](../scripts/easypoll/easypoll-devtools.js) → in the host page's poll panel, paste → check the preview → **Save**.
 5. **Viewer on a phone:** now playing, vote percentages, the over/under line and recent results update within about 10 seconds. The page opens in Vietnamese; the VI / EN switch in the header changes the language.

@@ -1,11 +1,11 @@
 import type { Ballot, GamesBallot, GamesPick, Player, PlayerId, Series, Tournament } from '../types/tournament.js';
-import { DEFAULT_GAMES_LINE } from './format.js';
+import { GAMES_LINES } from './format.js';
 import type { Translatable } from './i18n.js';
 import { isSeriesComplete, seriesWinner } from './series.js';
 
 // Discord predictions. For every series, members vote in up to two EasyPolls:
-// who wins, and (first-to-2 series only) over or under the host's line on how
-// many games it takes. The host either types the counts or imports the
+// who wins, and (except single matches) over or under a fixed line on how many
+// games it takes. The host either types the counts or imports the
 // per-voter JSON produced by the EasyPoll converter. Predictions are
 // display-only and never affect the bracket.
 
@@ -158,14 +158,14 @@ export function crowdFavorite(series: Series): PlayerId | undefined {
   return leaders.length === 1 ? leaders[0].playerId : undefined;
 }
 
-/** Over/under only makes sense when a series can run to different lengths. */
+/** Over/under only makes sense when a series can run to different lengths (not a single match). */
 export function hasGamesPrediction(series: Series): boolean {
-  return series.winsNeeded === 2;
+  return series.winsNeeded >= 2;
 }
 
-/** The line for a series' games prediction: the host's, or the default. */
+/** The fixed line for a series' games prediction: 2.5 in the group stage and semifinals, 4.5 in the first-to-3 final. */
 export function gamesLineOf(series: Series): number {
-  return series.gamesLine ?? DEFAULT_GAMES_LINE;
+  return GAMES_LINES[series.stage];
 }
 
 export type GamesOutcome = GamesPick | 'push';

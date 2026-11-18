@@ -33,23 +33,23 @@ This is the fourth app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md
 
 ### 2.1 Format
 
-Every match is a 1v1v1 game in a **group of three**. A group plays a **series**: first to 2 game wins (at most 4 games, since a 1-1-1 tie is possible). The host decides the player count before the draw; the app supports **21, 24, 27 or 30** players.
+Every match is a 1v1v1 game in a **group of three**. A group plays a **series**: first to 2 game wins (2–4 games, since a 1-1-1 tie is possible), except the grand final, which is **first to 3** (3–7 games: all three can reach 2-2-2). The host decides the player count before the draw; the app supports **21, 24, 27 or 30** players.
 
 | Players | Groups | Who reaches the 9-player semifinals                                   | Series (expected games\*) |
 | ------- | ------ | --------------------------------------------------------------------- | ------------------------- |
-| 21      | 7      | 7 group winners + **2 players the host picks** for the empty spots    | 11 (about 32)             |
-| 24      | 8      | 8 group winners + **1 player the host picks** for the empty spot      | 12 (about 35)             |
-| 27      | 9      | 9 group winners                                                       | 13 (about 38)             |
-| 30      | 10     | 10 group winners **minus 1 the host leaves out**                      | 14 (about 40)             |
+| 21      | 7      | 7 group winners + **2 players the host picks** for the empty spots    | 11 (about 34)             |
+| 24      | 8      | 8 group winners + **1 player the host picks** for the empty spot      | 12 (about 37)             |
+| 27      | 9      | 9 group winners                                                       | 13 (about 40)             |
+| 30      | 10     | 10 group winners **minus 1 the host leaves out**                      | 14 (about 43)             |
 
-\* Assuming evenly matched players, a first-to-2 series lasts 2.89 games on average.
+\* Assuming evenly matched players, a first-to-2 series lasts 2.89 games on average and the first-to-3 final 5.05.
 
 The host's picks are deliberately a judgement call rather than a formula (no runner-up ranking, no play-in). At the end of the group stage the app lists the candidates by group-stage record as a guide: every non-winner for an empty spot, every winner for leaving out. Viewers see the picks as they're made.
 
 Then:
 
 - **Semifinals**: 3 groups of 3, first to 2. Seeded by group-stage record (§2.3), then adjustable by the host (§2.4).
-- **Grand final**: the 3 semifinal winners, first to 2. Always first to 2.
+- **Grand final**: the 3 semifinal winners, **first to 3**. Always first to 3, even under the late-running rule.
 - **Late-running rule**: if the break before the semifinals ends late, the host can make each semifinal a **single match**. This saves about 6 games. It can only be switched before any semifinal has a result, and never applies to the final.
 
 ### 2.2 Ranking and ties
@@ -91,10 +91,18 @@ Predictions run in **EasyPoll on Discord**, not in the app. Each series can have
 | Winner | "Bảng 3: ai sẽ thắng?" / "Group 3: who wins?" | The three players | The series winner (a ruling counts) |
 | Over/under games | "Bảng 3: trên hay dưới 2,5 ván?" / "Group 3: over or under 2.5 games?" | "Trên 2,5 ván" / "Dưới 2,5 ván" (or "Over/Under 2.5 games") | More or fewer games than the line |
 
-- **The line** is the host's choice per series: 1.5 to 5 in steps of 0.5, default 2.5. A first-to-2 series lasts 2–4 games, so 2.5 sits near the middle. Copying the over/under question saves the line, so viewers see it on the series card while the poll is open.
-- **Whole-number lines** (2, 3, 4) can land exactly on the line, a **push**: those votes count neither right nor wrong.
+- **The line is fixed per phase** (`GAMES_LINES` in `format.ts`), shown on every series card that hasn't finished yet:
+
+  | Phase | Format | Line | Under / over, realistic skill\* | Under share, evenly matched → clear favourite |
+  | --- | --- | --- | --- | --- |
+  | Group stage | First to 2 (2–4 games) | **2.5** | 48% / 52% | 33% → 44% |
+  | Semifinals | First to 2 (2–4 games) | **2.5** | 49% / 51% | 33% → 44% |
+  | Grand final | First to 3 (3–7 games) | **4.5** | 47% / 53% | 33% → 53% |
+
+  \* 200,000 simulated 27-player events with the event plan's skill model (skill drawn from a normal distribution, a player's chance in a game proportional to e^skill; semifinals and final played by the actual winners). The other columns are exact: an evenly matched first-to-2 series ends in 2, 3 or 4 games with probability 33%, 44% and 22%; a first-to-3 final in 3–7 games with 11%, 22%, 30%, 25% and 12%. "Clear favourite" means one player wins 60% of games.
+
+  These are the half-lines closest to an even split in every scenario. The next half-line up is lopsided: 3.5 in a first-to-2 series is 78–89% under, and 5.5 in the final is 63–80% under. Whole numbers are ruled out because a game count landing on the line voids every vote: a line of 3 voids 40–44% of first-to-2 votes, and 5 voids 27–30% of final votes. A recorded poll keeps the line its voters saw.
 - **No over/under** for one-match series (late-running semifinals), which always last one game. A series **decided by a ruling** voids its over/under votes, since its game count says nothing about the players.
-- **Changing the line** after votes were recorded clears those votes (the app asks first): they answered a different question.
 - **Swaps and replacements** clear both polls of the affected series, because the line-up the voters saw has changed.
 
 For each poll the host copies the question and answers from the app, posts a non-anonymous EasyPoll, and later imports the votes:
@@ -155,12 +163,11 @@ interface Series {
   stage: 'group' | 'semi' | 'final';
   label: string; // "Group 3", "Semifinal 2", "Grand final"
   playerIds: [PlayerId, PlayerId, PlayerId];
-  winsNeeded: 1 | 2;
+  winsNeeded: 1 | 2 | 3; // 2 groups and semifinals, 3 the grand final, 1 late-running semifinals
   games: { placement: [first, second, third]; savedAt: string }[];
   startedAt?: string; // set by "Show as live" or the first saved game
   winnerOverride?: { playerId: PlayerId; reason: string };
   poll?: { votes: Record<PlayerId, number>; ballots?: { discordId; username; playerId }[]; recordedAt: string };
-  gamesLine?: number; // over/under line set by the host (default 2.5); first-to-2 series only
   gamesPoll?: { line: number; votes: { over; under }; ballots?: { discordId; username; pick: 'over' | 'under' }[]; recordedAt: string };
 }
 ```
@@ -207,14 +214,14 @@ All changes go through `applyAction(tournament, action, { now, random }) → Res
 | `setSemifinalPicks`                           | Group stage, every group decided; fill-ins must be non-winners, dropped players must be winners, at most the number of spots (partial picks allowed). Clears any semifinal arrangement |
 | `arrangeSemifinals`, `resetSemifinalDraft`    | Group stage, once the semifinal groups exist (picks made, ties drawn): swap two players between draft groups, or go back to the seeded groups |
 | `recordPoll`, `clearPoll`                     | Any series                                                      |
-| `setGamesLine`, `recordGamesPoll`, `clearGamesPoll` | First-to-2 series; the line is a multiple of 0.5 from 0.5 to 10; a new line clears votes recorded for another line |
+| `recordGamesPoll`, `clearGamesPoll`           | Any series that isn't a single match; the phase's fixed line is copied into the recorded poll |
 | `resolveTies`                                 | There are pending ties (repeats while new ties surface)         |
 | `setLateRule`                                 | Before any semifinal has a result                               |
 | `advance`                                     | Every series in the stage decided, semifinal picks complete (group stage), no pending ties |
 | `reopenStage`                                 | After setup; groups → setup only while no group has results     |
 | `reset`                                       | Any time (earlier saves stay restorable)                        |
 
-`advance` creates the next stage's series: the semifinals (`S1`–`S3`) exactly as arranged (or seeded), first to 2 or one match under the late rule; then the grand final (`F`, first to 2); then `done`. A draft that no longer holds exactly the current semifinalists (say, after new picks) is ignored and the seeded groups are used. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draft, so nothing has to be redone. A new participant list or a redraw clears both.
+`advance` creates the next stage's series: the semifinals (`S1`–`S3`) exactly as arranged (or seeded), first to 2 or one match under the late rule; then the grand final (`F`, first to 3); then `done`. A draft that no longer holds exactly the current semifinalists (say, after new picks) is ignored and the seeded groups are used. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draft, so nothing has to be redone. A new participant list or a redraw clears both.
 
 The host page uses `crypto.getRandomValues` for draws, so no one can claim the draw was rigged.
 
@@ -226,7 +233,7 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 
 - **Now playing**: the live series with each player's game placements and win pips, plus "next series in about N minutes" once there's enough timing data. When nothing is live: "Waiting for the host to start the next series" and the next series "on deck".
 - **Road to the semifinals** (group stage): the qualification rule in plain words for the player count, the group winners (a winner the host left out is struck through), and the host's picks.
-- **Series cards**: per-game place chips, win pips, crown for the winner, "Live / Finished / Upcoming", the series length ("first to 2" or "one match"), vote shares when a poll was recorded, the over/under line with its vote split and, once finished, the result ("3 ván: Trên"), and the reason for any override.
+- **Series cards**: per-game place chips, win pips, crown for the winner, "Live / Finished / Upcoming", the series length ("first to 2", "first to 3" or "one match"), vote shares when a poll was recorded, the over/under line with its vote split and, once finished, the result ("3 ván: Trên"), and the reason for any override.
 - **Discord predictions** and **recent results** (newest first; identical timestamps fall back to play order).
 - Status shows "Live · updated just now" or "Offline", and the last good state stays on screen while offline.
 
@@ -236,7 +243,7 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 - **Setup**: paste names one per line, save, draw groups (redraw any time before starting), adjust the draw by tapping two players in different groups to swap them, then start the group stage.
 - **Rearrange players** (group stage and semifinals, collapsed under the series list): the same tap-to-swap for groups that haven't started; started groups are shown locked. In the semifinals each name shows its first-round group, and rematches are flagged.
 - **Game entry**: tap the winner, then the runner-up; third place fills itself in. Save, Undo last game, and "Show as live" to mark a series as playing before its first result. Picks clear as soon as a game is saved, so a double tap can't save it twice.
-- **Poll panel**: two sections, "who wins?" and (first-to-2 series) "over/under games" with the line picker. Each has copy-ready question and answers, a votes JSON import with preview, typed counts, and a clear button.
+- **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has copy-ready question and answers, a votes JSON import with preview, typed counts, and a clear button.
 - **Stage gate** (once every series in the stage is decided): who's through; at 21, 24 or 30 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); pending seeding ties and the draw button, recent draws, the semifinal groups as viewers see them with tap-to-swap (and "Back to the seeded groups" after any swap), late-running rule checkbox, and the advance button ("Start the semifinals", "Start the grand final", "Finish the tournament").
 - **Save indicator**: "Saving…", "All changes saved", or "Not saved" with a retry button.
 - **Host tools**: see §2.4, plus "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
@@ -353,7 +360,7 @@ The full step-by-step runbook, with verification, a rehearsal, event-day operati
 
 1. Before the event: open `/host`, enter the PIN, set the event name and paste the final participant list.
 2. Draw the groups (redraw if needed, or swap individual players) and share the viewer link in Discord. The draw shows on the viewer page right away.
-3. For each series: "Show as live", set the over/under line, post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel.
+3. For each series: "Show as live", post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel.
 4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots, at 30 pick the winner to leave out. Then break any seeding ties with the draw button. The semifinal groups now appear for viewers: rearrange them if needed, decide on the late-running rule, and start the semifinals. Then post the semifinal polls from each series' poll panel.
 5. Download the JSON backup after each stage.
 
@@ -368,7 +375,8 @@ The full step-by-step runbook, with verification, a rehearsal, event-day operati
 - [x] API + storage: one Vercel Function, Upstash Redis with compare-and-set and capped history, PIN auth, dev middleware
 - [x] Host page: PIN gate, setup and draw, two-tap entry, polls import, stage gate, host tools
 - [x] Host control over line-ups: tap-to-swap players in the group draw and the semifinals; host picks for empty semifinal spots (21, 24) or the winner left out (30), replacing the runner-up and play-in rules
-- [x] Second prediction per series: over/under games with a host-chosen line, in the poll panel, series cards and leaderboard
+- [x] Second prediction per series: over/under games with a fixed line per phase (2.5, 2.5, 4.5), in the poll panel, series cards and leaderboard
+- [x] First-to-3 grand final
 - [x] Vietnamese (default) and English, from one translation mapping, with a VI / EN switch
 - [x] Viewer page: now playing, road to the semifinals, bracket, predictions, recent results
 - [x] EasyPoll dashboard table → votes JSON: DevTools console snippet and `pnpm easypoll:json`

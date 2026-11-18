@@ -4,7 +4,7 @@ Guidelines for working on the **PvP Tournament Tracker** (`apps/pvp`), one of fo
 
 ## What this app is (and is not)
 
-- A live tracker for the guild's 1v1v1 PvP tournament: 21, 24, 27 or 30 players, groups of three playing **first to 2 game wins** at every stage, with the host able to rearrange line-ups and decide the semifinal spots the group winners don't fill exactly. The **viewer page** (`/`) shows the bracket live; the **host page** (`/host`, behind a PIN) is the one scorekeeper device that records results. Both pages are in **Vietnamese by default**, with English as the alternative.
+- A live tracker for the guild's 1v1v1 PvP tournament: 21, 24, 27 or 30 players, groups of three playing **first to 2 game wins** (the grand final **first to 3**), with the host able to rearrange line-ups and decide the semifinal spots the group winners don't fill exactly. The **viewer page** (`/`) shows the bracket live; the **host page** (`/host`, behind a PIN) is the one scorekeeper device that records results. Both pages are in **Vietnamese by default**, with English as the alternative.
 - Vite + React 18 + TypeScript + Tailwind 4, plus **one Vercel Function** (`api/tournament.ts`) backed by **Upstash Redis**. No router library, no accounts, no websockets: viewers poll.
 - It does **not** run or schedule the fights, track KOs, or let viewers vote. Discord predictions happen in EasyPoll; the host imports the results, and they **never** affect the bracket.
 
@@ -22,8 +22,8 @@ viewer  --GET every 4 s (CDN-cached 2 s)--> Tournament --derive in src/lib--> br
 
 ## Architecture
 
-- `src/types/tournament.ts` - domain types. `Series` is the unit of play: three players, `winsNeeded` 1 or 2, a list of `Game` placements, plus an optional `winnerOverride`, the winner `poll`, and the over/under `gamesLine` and `gamesPoll`. `Stage` runs `setup → groups → semis → final → done`. `semifinalPicks` holds the host's semifinal decisions.
-- `src/lib/format.ts` - `SUPPORTED_COUNTS` and `formatFor(count)`: number of groups, empty semifinal spots the host fills (`fillInSpots`: 21 → 2, 24 → 1) and extra winners the host leaves out (`dropSpots`: 30 → 1). Also the over/under line options (`GAMES_LINE_OPTIONS`, `DEFAULT_GAMES_LINE` 2.5, `isValidGamesLine`).
+- `src/types/tournament.ts` - domain types. `Series` is the unit of play: three players, `winsNeeded` 1, 2 or 3, a list of `Game` placements, plus an optional `winnerOverride`, the winner `poll` and the over/under `gamesPoll`. `Stage` runs `setup → groups → semis → final → done`. `semifinalPicks` holds the host's semifinal decisions.
+- `src/lib/format.ts` - `SUPPORTED_COUNTS` and `formatFor(count)`: number of groups, empty semifinal spots the host fills (`fillInSpots`: 21 → 2, 24 → 1) and extra winners the host leaves out (`dropSpots`: 30 → 1). Also `WINS_NEEDED` per phase (final 3) and the fixed over/under lines `GAMES_LINES` (2.5 / 2.5 / 4.5, with the calculation behind them in the comment).
 - `src/lib/series.ts` - per-series records (wins, points with 1st = 3 / 2nd = 1 / 3rd = 0, games), `seriesWinner` (an override wins over games), placement validation.
 - `src/lib/ranking.ts` - `compareRecords` (wins, then points per game) and `rankRecords`, which applies recorded `TieDraw`s and reports the ties still unresolved.
 - `src/lib/qualification.ts` - `groupStageOutcome` (group winners and records), `semifinalSelection` (pick candidates by record, the picks that still fit the results, and the 9 semifinalists once complete), `seedingOrder`, `pendingTies` (seeding ties that block `advance`), `semifinalGroups` (the groups before the semifinals start: the host's draft or the seeding) and `semifinalSeriesFrom`.
@@ -51,9 +51,9 @@ viewer  --GET every 4 s (CDN-cached 2 s)--> Tournament --derive in src/lib--> br
 - **The semifinal groups are public before they start.** `semifinalGroups` is the single source for them: the host's `semifinalDraft` if it holds exactly the current semifinalists, otherwise the seeded groups. The viewer shows it as a draft, the stage gate rearranges it (`arrangeSemifinals`), and `advance` starts exactly it via `semifinalSeriesFrom`. New picks clear the draft; `reopenStage` from the semifinals writes the started groups back into it.
 - **Swaps only touch series without results.** `swapPlayers` works in setup, the group stage and the semifinals, between two different series that both have no game and no override. Rematches in a rearranged semifinal are a warning in the UI, not a rule.
 - **A changed line-up clears that series' predictions.** Swaps and `replacePlayer` drop both `poll` and `gamesPoll` (`withoutPolls`): the votes were for the old line-up, and a winner poll with a vote for a departed player would fail `parseTournament`.
-- **Over/under rules.** Only first-to-2 series (`hasGamesPrediction`) carry it. The recorded `gamesPoll.line` is what counts, not the current `gamesLine`, and `setGamesLine` drops votes recorded for a different line. A game count equal to the line is a **push** and a ruling **voids** it; neither counts for the crowd record or the leaderboard.
+- **Over/under rules.** Every series except a single match carries it (`hasGamesPrediction`). The line is **fixed per phase** in `GAMES_LINES`, not chosen by the host; don't add a picker back without re-running the analysis in the `format.ts` comment (half-lines closest to a 50/50 split). A recorded `gamesPoll.line` is what counts, so changing the constants never reinterprets old votes. A ruling **voids** the prediction; pushes can only happen with a whole-number line, and neither counts for the crowd record or the leaderboard.
 - **Results only change in the current stage.** Earlier stages need `reopenStage`, which deletes the current stage's series (going back from groups to setup is allowed only while no group has results).
-- **The final is always first to 2.** The late-running rule (`lateRule`) only turns the **semifinals** into single matches, and only before any semifinal has a result.
+- **The final is always first to 3** (`WINS_NEEDED.final`). The late-running rule (`lateRule`) only turns the **semifinals** into single matches, and only before any semifinal has a result.
 - **Replacements are for semifinals and the final only, and only before the series has a game.** After that, use a winner override (it needs a public reason).
 - **The server is the authority.** It sets `version = expectedVersion + 1` and `updatedAt` itself, rejects documents over 256 KB, and validates with `parseTournament`. Keep `parseTournament` in sync with any type change.
 - **Relative `.js` imports in `src/lib`, `src/types`, `server/` and `api/`.** Vercel runs the function as plain Node ESM, which can't resolve the `@/` alias or extensionless paths. UI code (`components`, `hooks`, `views`) uses `@/`.
@@ -84,7 +84,7 @@ viewer  --GET every 4 s (CDN-cached 2 s)--> Tournament --derive in src/lib--> br
 - Biome formats with single quotes and a 160-character line width, and sorts imports; run `pnpm exec biome check --write apps/pvp` rather than fixing order by hand.
 - Theme: reuse the wuxia tokens in [src/index.css](src/index.css) (`bg`, `surface`, `gold`, `border`, plus `green` for "through" and "live"). Mobile-first; the host page is used on a phone or a laptop next to the game.
 - TypeScript is strict with `noUnusedLocals`/`noUnusedParameters`; keep imports and params clean.
-- User-facing copy is plain language for guild members ("first to 2" / "chạm 2", "points per game" / "điểm mỗi ván"), not tournament jargon. Vietnamese uses "BTC" for the host, "Bảng" for groups, "ván" for games and "trận" for a series. Write the Vietnamese as a native speaker would, not as a word-for-word translation.
+- User-facing copy is plain language for guild members ("first to 2" / "chạm 2", "first to 3" / "chạm 3", "points per game" / "điểm mỗi ván"), not tournament jargon. Vietnamese uses "BTC" for the host, "Bảng" for groups, "ván" for games and "trận" for a series. Write the Vietnamese as a native speaker would, not as a word-for-word translation.
 
 ## Deployment
 

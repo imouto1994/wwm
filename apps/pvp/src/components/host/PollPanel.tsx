@@ -1,12 +1,13 @@
 import { Button } from '@/components/Button';
 import { CopyButton } from '@/components/CopyButton';
+import { JsonField } from '@/components/host/JsonField';
 import type { HostController } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import { formatClockTime } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
 import { gamesLineOf, gamesShares, hasGamesPrediction, matchGamesVotes, matchVotes, parseVotesJson, voteShares } from '@/lib/polls';
-import type { GamesPick, PlayerId, Series, Tournament } from '@/types/tournament';
-import { type ChangeEvent, type ReactNode, useEffect, useState } from 'react';
+import type { GamesPick, Series, Tournament } from '@/types/tournament';
+import { type ReactNode, useState } from 'react';
 
 interface PollPanelProps {
   host: HostController;
@@ -14,7 +15,6 @@ interface PollPanelProps {
   series: Series;
 }
 
-const inputClass = 'rounded-lg border border-border bg-bg px-2 py-1.5 text-sm text-fg';
 const subheading = 'text-xs font-semibold uppercase tracking-wide text-muted';
 
 function Prompt({ question, answers }: { question: string; answers: string[] }) {
@@ -33,33 +33,6 @@ function Prompt({ question, answers }: { question: string; answers: string[] }) 
   );
 }
 
-/** Paste box plus file picker for the EasyPoll votes JSON; parsing and matching stay with the caller. */
-function VotesJsonField({ value, onChange }: { value: string; onChange: (text: string) => void }) {
-  const { t } = useI18n();
-  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (file) onChange(await file.text());
-    event.target.value = '';
-  }
-  return (
-    <>
-      <textarea
-        rows={3}
-        placeholder={t.poll.importPlaceholder}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className='rounded-lg border border-border bg-bg px-3 py-2 font-mono text-xs text-fg'
-      />
-      <input
-        type='file'
-        accept='application/json,.json'
-        onChange={handleFile}
-        className='text-xs text-muted file:mr-2 file:rounded file:border-0 file:bg-surface-hover file:px-2 file:py-1 file:text-fg'
-      />
-    </>
-  );
-}
-
 function ImportIssues({
   unmatched,
   duplicates,
@@ -74,13 +47,17 @@ function ImportIssues({
   );
 }
 
-function Recorded({ recordedAt, named, children }: { recordedAt: string; named: number | undefined; children?: ReactNode }) {
+function Recorded({ recordedAt, count, onClear, children }: { recordedAt: string; count: number; onClear: () => void; children?: ReactNode }) {
   const { t, locale } = useI18n();
-  const time = formatClockTime(recordedAt, locale);
   return (
-    <div className='flex flex-col gap-1 text-sm'>
-      <p className='text-muted'>{named === undefined ? t.poll.recordedCounts(time) : t.poll.recorded(time, named)}</p>
+    <div className='flex flex-col gap-2 text-sm'>
+      <p className='text-muted'>{t.poll.recorded(formatClockTime(recordedAt, locale), count)}</p>
       {children}
+      <div>
+        <Button variant='danger' onClick={onClear}>
+          {t.poll.clear}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -90,21 +67,10 @@ function WinnerPoll({ host, tournament, series }: PollPanelProps) {
   const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   const shares = voteShares(series);
-  const [counts, setCounts] = useState<Record<PlayerId, string>>({});
   const [jsonText, setJsonText] = useState('');
 
-  useEffect(() => {
-    setCounts(Object.fromEntries(series.playerIds.map((playerId) => [playerId, String(series.poll?.votes[playerId] ?? '')])));
-    setJsonText('');
-  }, [series.poll, series.playerIds]);
-
   const parsed = jsonText.trim() ? parseVotesJson(jsonText) : undefined;
-  const matched = parsed?.ok ? matchVotes(series, tournament.players, parsed.value) : undefined;
-
-  function saveCounts() {
-    const votes = Object.fromEntries(series.playerIds.map((playerId) => [playerId, Number(counts[playerId] || 0)]));
-    host.dispatch({ type: 'recordPoll', seriesId: series.id, votes });
-  }
+  const matched = parsed?.ok ? matchVotes(series, tournament.displayNames, parsed.value) : undefined;
 
   return (
     <section className='flex flex-col gap-3'>
@@ -112,14 +78,18 @@ function WinnerPoll({ host, tournament, series }: PollPanelProps) {
       <Prompt question={t.poll.winnerQuestion(t.seriesName(series))} answers={series.playerIds.map(nameOf)} />
 
       {series.poll && (
-        <Recorded recordedAt={series.poll.recordedAt} named={series.poll.ballots?.length}>
+        <Recorded
+          recordedAt={series.poll.recordedAt}
+          count={series.poll.ballots.length}
+          onClear={() => host.dispatch({ type: 'clearPoll', seriesId: series.id })}
+        >
           {shares && <p className='text-fg'>{shares.map((share) => `${nameOf(share.playerId)} ${share.percent}%`).join(' · ')}</p>}
         </Recorded>
       )}
 
       <div className='flex flex-col gap-2'>
         <h5 className={subheading}>{t.poll.importTitle}</h5>
-        <VotesJsonField value={jsonText} onChange={setJsonText} />
+        <JsonField value={jsonText} onChange={setJsonText} placeholder={t.poll.importPlaceholder} />
         {parsed && !parsed.ok && <p className='text-sm text-red'>{parsed.error(t)}</p>}
         {matched && (
           <div className='flex flex-col gap-1 text-sm'>
@@ -129,40 +99,13 @@ function WinnerPoll({ host, tournament, series }: PollPanelProps) {
               <Button
                 variant='primary'
                 disabled={matched.ballots.length === 0}
-                onClick={() => host.dispatch({ type: 'recordPoll', seriesId: series.id, votes: matched.votes, ballots: matched.ballots }) && setJsonText('')}
+                onClick={() => host.dispatch({ type: 'recordPoll', seriesId: series.id, ballots: matched.ballots }) && setJsonText('')}
               >
                 {t.poll.saveVotes(matched.ballots.length)}
               </Button>
             </div>
           </div>
         )}
-      </div>
-
-      <div className='flex flex-col gap-2'>
-        <h5 className={subheading}>{t.poll.typeCounts}</h5>
-        <div className='grid gap-2 sm:grid-cols-3'>
-          {series.playerIds.map((playerId) => (
-            <label key={playerId} className='flex flex-col gap-1 text-xs text-muted'>
-              {nameOf(playerId)}
-              <input
-                type='number'
-                min={0}
-                inputMode='numeric'
-                value={counts[playerId] ?? ''}
-                onChange={(event) => setCounts((current) => ({ ...current, [playerId]: event.target.value }))}
-                className={inputClass}
-              />
-            </label>
-          ))}
-        </div>
-        <div className='flex flex-wrap gap-2'>
-          <Button onClick={saveCounts}>{t.poll.saveCounts}</Button>
-          {series.poll && (
-            <Button variant='danger' onClick={() => host.dispatch({ type: 'clearPoll', seriesId: series.id })}>
-              {t.poll.clear}
-            </Button>
-          )}
-        </div>
       </div>
     </section>
   );
@@ -179,13 +122,7 @@ function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) 
   const line = series.gamesPoll?.line ?? gamesLineOf(series);
   const lineText = decimal(line);
   const shares = gamesShares(series);
-  const [counts, setCounts] = useState<Record<GamesPick, string>>({ over: '', under: '' });
   const [jsonText, setJsonText] = useState('');
-
-  useEffect(() => {
-    setCounts({ over: String(series.gamesPoll?.votes.over ?? ''), under: String(series.gamesPoll?.votes.under ?? '') });
-    setJsonText('');
-  }, [series.gamesPoll]);
 
   const parsed = jsonText.trim() ? parseVotesJson(jsonText) : undefined;
   const matched = parsed?.ok ? matchGamesVotes(parsed.value) : undefined;
@@ -198,7 +135,11 @@ function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) 
       <Prompt question={t.poll.gamesQuestion(t.seriesName(series), lineText)} answers={[t.poll.over(lineText), t.poll.under(lineText)]} />
 
       {series.gamesPoll && (
-        <Recorded recordedAt={series.gamesPoll.recordedAt} named={series.gamesPoll.ballots?.length}>
+        <Recorded
+          recordedAt={series.gamesPoll.recordedAt}
+          count={series.gamesPoll.ballots.length}
+          onClear={() => host.dispatch({ type: 'clearGamesPoll', seriesId: series.id })}
+        >
           {shares && (
             <p className='text-fg'>
               {t.poll.overShort} {shares.over}% · {t.poll.underShort} {shares.under}%
@@ -209,7 +150,7 @@ function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) 
 
       <div className='flex flex-col gap-2'>
         <h5 className={subheading}>{t.poll.importTitle}</h5>
-        <VotesJsonField value={jsonText} onChange={setJsonText} />
+        <JsonField value={jsonText} onChange={setJsonText} placeholder={t.poll.importPlaceholder} />
         {parsed && !parsed.ok && <p className='text-sm text-red'>{parsed.error(t)}</p>}
         {matched && (
           <div className='flex flex-col gap-1 text-sm'>
@@ -219,9 +160,7 @@ function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) 
               <Button
                 variant='primary'
                 disabled={matched.ballots.length === 0}
-                onClick={() =>
-                  host.dispatch({ type: 'recordGamesPoll', seriesId: series.id, votes: matched.votes, ballots: matched.ballots }) && setJsonText('')
-                }
+                onClick={() => host.dispatch({ type: 'recordGamesPoll', seriesId: series.id, ballots: matched.ballots }) && setJsonText('')}
               >
                 {t.poll.saveVotes(matched.ballots.length)}
               </Button>
@@ -229,48 +168,16 @@ function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) 
           </div>
         )}
       </div>
-
-      <div className='flex flex-col gap-2'>
-        <h5 className={subheading}>{t.poll.typeCounts}</h5>
-        <div className='grid grid-cols-2 gap-2'>
-          {PICKS.map((pick) => (
-            <label key={pick} className='flex flex-col gap-1 text-xs text-muted'>
-              {pick === 'over' ? t.poll.over(lineText) : t.poll.under(lineText)}
-              <input
-                type='number'
-                min={0}
-                inputMode='numeric'
-                value={counts[pick]}
-                onChange={(event) => setCounts((current) => ({ ...current, [pick]: event.target.value }))}
-                className={inputClass}
-              />
-            </label>
-          ))}
-        </div>
-        <div className='flex flex-wrap gap-2'>
-          <Button
-            onClick={() =>
-              host.dispatch({ type: 'recordGamesPoll', seriesId: series.id, votes: { over: Number(counts.over || 0), under: Number(counts.under || 0) } })
-            }
-          >
-            {t.poll.saveCounts}
-          </Button>
-          {series.gamesPoll && (
-            <Button variant='danger' onClick={() => host.dispatch({ type: 'clearGamesPoll', seriesId: series.id })}>
-              {t.poll.clear}
-            </Button>
-          )}
-        </div>
-      </div>
     </section>
   );
 }
 
 /**
  * The Discord predictions for one series: copy-ready poll text for EasyPoll,
- * then either typed counts or the per-voter JSON from the EasyPoll console
- * snippet or `pnpm easypoll:json`, previewed before it is saved. One-match
- * series get only the winner poll, since their length is always one game.
+ * then the per-voter JSON from the EasyPoll console snippet or
+ * `pnpm easypoll:json`, previewed before it is saved. Typed counts aren't
+ * accepted, since only named ballots can rank members on the leaderboard.
+ * One-match series get only the winner poll, since their length is always one game.
  */
 export function PollPanel({ host, tournament, series }: PollPanelProps) {
   const { t } = useI18n();
@@ -279,6 +186,7 @@ export function PollPanel({ host, tournament, series }: PollPanelProps) {
       <div className='flex flex-col gap-1'>
         <h3 className='font-semibold text-fg'>{t.poll.title}</h3>
         <p className='text-xs text-muted'>{t.poll.nonAnonymous}</p>
+        <p className='text-xs text-muted'>{t.poll.jsonOnly}</p>
       </div>
       <WinnerPoll key={`${series.id}-winner`} host={host} tournament={tournament} series={series} />
       {hasGamesPrediction(series) && <GamesPollSection key={`${series.id}-games`} host={host} series={series} />}

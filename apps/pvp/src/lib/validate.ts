@@ -1,11 +1,8 @@
 import type {
-  Ballot,
   Game,
-  GamesBallot,
   GamesPick,
   GamesPoll,
   Placement,
-  Player,
   PlayerId,
   Poll,
   Result,
@@ -17,6 +14,7 @@ import type {
   Tournament,
 } from '../types/tournament.js';
 import { isSupportedCount, isValidGamesLine } from './format.js';
+import { MAX_DISPLAY_NAME, MAX_DISPLAY_NAMES, normalizeUsername } from './names.js';
 
 // Turns untrusted JSON (a PUT body on the server, a GET response in the
 // browser) into a Tournament, or explains what is wrong. It never throws and
@@ -36,9 +34,35 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 const isString = (value: unknown): value is string => typeof value === 'string';
 const optionalString = (value: unknown) => value === undefined || isString(value);
 
-function parsePlayer(value: unknown, path: string): Player {
-  check(isObject(value) && isString(value.id) && value.id && isString(value.name) && value.name, `${path} must have an id and a name.`);
-  return { id: value.id, name: value.name };
+const isDisplayName = (value: unknown): value is string => isString(value) && value.length > 0 && value.length <= MAX_DISPLAY_NAME;
+
+// Only the shape is checked here. Username format and unique names are rules
+// for new input (setDisplayNames, setPlayers), so documents converted from
+// version 1, with ids like p1, still load.
+function parseDisplayNames(value: unknown): Record<string, string> {
+  check(isObject(value), 'displayNames must be an object.');
+  const entries = Object.entries(value);
+  check(entries.length <= MAX_DISPLAY_NAMES, `displayNames can list at most ${MAX_DISPLAY_NAMES} people.`);
+  check(
+    entries.every(([username, name]) => username && isDisplayName(name)),
+    `displayNames must map usernames to names of 1 to ${MAX_DISPLAY_NAME} characters.`
+  );
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function parsePlayers(value: unknown): PlayerId[] {
+  check(Array.isArray(value) && value.every((playerId) => isString(playerId) && playerId), 'players must be a list of usernames.');
+  return value as PlayerId[];
+}
+
+/** Version 1 stored `{ id, name }` players with made-up ids (p1, p2, …); the names become display names under those ids. */
+function parseVersion1Players(value: unknown): { players: PlayerId[]; displayNames: Record<string, string> } {
+  check(Array.isArray(value), 'players must be a list.');
+  const players = value.map((player, index) => {
+    check(isObject(player) && isString(player.id) && player.id && isDisplayName(player.name), `players[${index}] must have an id and a name.`);
+    return { id: player.id, name: player.name };
+  });
+  return { players: players.map((player) => player.id), displayNames: Object.fromEntries(players.map((player) => [player.id, player.name])) };
 }
 
 function parseGame(value: unknown, path: string, players: readonly PlayerId[]): Game {
@@ -51,54 +75,48 @@ function parseGame(value: unknown, path: string, players: readonly PlayerId[]): 
   return { placement: placement as Placement, savedAt: value.savedAt };
 }
 
-function parsePoll(value: unknown, path: string, players: readonly PlayerId[]): Poll {
-  check(isObject(value) && isObject(value.votes) && isString(value.recordedAt), `${path} must have votes and recordedAt.`);
-  const votes: Record<PlayerId, number> = {};
-  for (const [playerId, count] of Object.entries(value.votes)) {
-    check(players.includes(playerId), `${path}.votes has a vote for someone outside the series.`);
-    check(typeof count === 'number' && Number.isInteger(count) && count >= 0, `${path}.votes must be whole numbers.`);
-    votes[playerId] = count;
-  }
-  let ballots: Ballot[] | undefined;
-  if (value.ballots !== undefined) {
-    check(Array.isArray(value.ballots), `${path}.ballots must be a list.`);
-    ballots = value.ballots.map((ballot, index) => {
-      check(
-        isObject(ballot) && isString(ballot.discordId) && isString(ballot.username) && isString(ballot.playerId) && players.includes(ballot.playerId),
-        `${path}.ballots[${index}] is invalid.`
-      );
-      return { discordId: ballot.discordId, username: ballot.username, playerId: ballot.playerId };
-    });
-  }
-  return { votes, ...(ballots ? { ballots } : {}), recordedAt: value.recordedAt };
+/**
+ * Reads a poll's ballots, one per Discord member; `read` checks the pick.
+ * Polls saved before the votes JSON was required may hold only counts and no
+ * ballots. They can't feed the leaderboard, so they come back undefined and
+ * are dropped; the host imports that poll's JSON again.
+ */
+function parseBallots<T>(
+  value: Record<string, unknown>,
+  path: string,
+  read: (ballot: Record<string, unknown>) => T | undefined
+): (T & { username: string })[] | undefined {
+  if (value.ballots === undefined) return undefined;
+  check(Array.isArray(value.ballots), `${path}.ballots must be a list.`);
+  const ballots = value.ballots.map((ballot, index) => {
+    check(isObject(ballot), `${path}.ballots[${index}] is invalid.`);
+    // Version 1 ballots also carried a Discord ID, which stands in for a missing username.
+    const username = isString(ballot.username) && ballot.username.trim() ? normalizeUsername(ballot.username) : ballot.discordId;
+    check(isString(username) && username, `${path}.ballots[${index}] is invalid.`);
+    const pick = read(ballot);
+    check(pick !== undefined, `${path}.ballots[${index}] is invalid.`);
+    return { username, ...pick };
+  });
+  check(new Set(ballots.map((ballot) => ballot.username)).size === ballots.length, `${path} has more than one ballot from the same member.`);
+  return ballots.length > 0 ? ballots : undefined;
+}
+
+function parsePoll(value: unknown, path: string, players: readonly PlayerId[]): Poll | undefined {
+  check(isObject(value) && isString(value.recordedAt), `${path} must have recordedAt.`);
+  const ballots = parseBallots(value, path, (ballot) =>
+    isString(ballot.playerId) && players.includes(ballot.playerId) ? { playerId: ballot.playerId } : undefined
+  );
+  return ballots && { ballots, recordedAt: value.recordedAt };
 }
 
 const GAMES_PICKS: readonly GamesPick[] = ['over', 'under'];
-const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
-function parseGamesPoll(value: unknown, path: string): GamesPoll {
-  check(
-    isObject(value) && isValidGamesLine(value.line) && isObject(value.votes) && isString(value.recordedAt),
-    `${path} must have a line, votes and recordedAt.`
+function parseGamesPoll(value: unknown, path: string): GamesPoll | undefined {
+  check(isObject(value) && isValidGamesLine(value.line) && isString(value.recordedAt), `${path} must have a line and recordedAt.`);
+  const ballots = parseBallots(value, path, (ballot) =>
+    isString(ballot.pick) && (GAMES_PICKS as readonly string[]).includes(ballot.pick) ? { pick: ballot.pick as GamesPick } : undefined
   );
-  const { votes } = value;
-  check(isCount(votes.over) && isCount(votes.under), `${path}.votes must count over and under in whole numbers.`);
-  let ballots: GamesBallot[] | undefined;
-  if (value.ballots !== undefined) {
-    check(Array.isArray(value.ballots), `${path}.ballots must be a list.`);
-    ballots = value.ballots.map((ballot, index) => {
-      check(
-        isObject(ballot) &&
-          isString(ballot.discordId) &&
-          isString(ballot.username) &&
-          isString(ballot.pick) &&
-          (GAMES_PICKS as readonly string[]).includes(ballot.pick),
-        `${path}.ballots[${index}] is invalid.`
-      );
-      return { discordId: ballot.discordId, username: ballot.username, pick: ballot.pick as GamesPick };
-    });
-  }
-  return { line: value.line, votes: { over: votes.over, under: votes.under }, ...(ballots ? { ballots } : {}), recordedAt: value.recordedAt };
+  return ballots && { line: value.line, ballots, recordedAt: value.recordedAt };
 }
 
 function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<PlayerId>): Series {
@@ -196,17 +214,19 @@ function parseSemifinalDraft(value: unknown, knownPlayers: ReadonlySet<PlayerId>
 export function parseTournament(input: unknown): Result<Tournament> {
   try {
     check(isObject(input), 'The tournament must be an object.');
-    check(input.schemaVersion === 1, 'Unknown schema version.');
+    check(input.schemaVersion === 1 || input.schemaVersion === 2, 'Unknown schema version.');
     check(typeof input.version === 'number' && Number.isInteger(input.version) && input.version >= 0, 'version must be a whole number.');
     check(isString(input.updatedAt), 'updatedAt must be a string.');
     check(isString(input.name) && input.name.length <= 80, 'name must be a short string.');
     check(isString(input.stage) && (STAGES as readonly string[]).includes(input.stage), 'stage is invalid.');
     check(typeof input.lateRule === 'boolean', 'lateRule must be true or false.');
 
-    check(Array.isArray(input.players), 'players must be a list.');
-    const players = input.players.map((player, index) => parsePlayer(player, `players[${index}]`));
+    const { players, displayNames } =
+      input.schemaVersion === 1
+        ? parseVersion1Players(input.players)
+        : { players: parsePlayers(input.players), displayNames: parseDisplayNames(input.displayNames) };
     check(players.length === 0 || isSupportedCount(players.length), 'There must be 21, 24, 27 or 30 players.');
-    const knownPlayers = new Set(players.map((player) => player.id));
+    const knownPlayers = new Set(players);
     check(knownPlayers.size === players.length, 'Player ids must be unique.');
 
     check(Array.isArray(input.series), 'series must be a list.');
@@ -222,11 +242,12 @@ export function parseTournament(input: unknown): Result<Tournament> {
     return {
       ok: true,
       value: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         version: input.version,
         updatedAt: input.updatedAt,
         name: input.name,
         players,
+        displayNames,
         stage: input.stage as Stage,
         series,
         ...(isString(input.currentSeriesId) ? { currentSeriesId: input.currentSeriesId } : {}),

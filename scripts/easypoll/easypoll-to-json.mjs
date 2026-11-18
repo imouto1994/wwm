@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Converts EasyPoll dashboard vote tables (saved as HTML) into a JSON array of
-// { discordId, username, vote } entries for the PvP tracker.
+// { username, vote } entries for the PvP tracker.
 //
 // Usage:
 //   pnpm easypoll:json group-4.html -o group-4.json
@@ -9,7 +9,7 @@
 // Getting the HTML: open the poll's votes in the EasyPoll dashboard, open the
 // browser console and run `copy(document.querySelector('table').outerHTML)`,
 // then paste into a file. If the votes span several pages, save each page and
-// pass all the files; votes are merged by Discord ID.
+// pass all the files; votes are merged by username.
 //
 // Quicker: paste easypoll-devtools.js into that console instead; it produces
 // the same JSON and copies it to the clipboard, no files needed.
@@ -50,7 +50,7 @@ async function main() {
 
   const { votes, conflicts } = mergeVotes(lists);
   for (const conflict of conflicts) {
-    console.error(`Warning: ${conflict.username || conflict.discordId} has different answers (${conflict.votes.join(' vs ')}); kept the first.`);
+    console.error(`Warning: ${conflict.username} has different answers (${conflict.votes.join(' vs ')}); kept the first.`);
   }
   if (votes.length === 0) {
     console.error('No votes found. Is this the votes table from the EasyPoll dashboard?');

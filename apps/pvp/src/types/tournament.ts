@@ -5,12 +5,13 @@
 // (standings, qualifiers, seeds, the champion) is derived from it by the pure
 // functions in src/lib, so a corrected game result re-flows automatically.
 
+/**
+ * A participant's Discord username, lowercase and without "@". Screens show
+ * the matching entry of `Tournament.displayNames` instead. Version 1
+ * documents used made-up ids (p1, p2, …); those keep working because their
+ * names were moved into `displayNames` (see parseTournament).
+ */
 export type PlayerId = string;
-
-export interface Player {
-  id: PlayerId;
-  name: string;
-}
 
 /** Player ids in finishing order for one game: 1st, 2nd, 3rd. */
 export type Placement = [PlayerId, PlayerId, PlayerId];
@@ -23,18 +24,19 @@ export interface Game {
 
 export type SeriesStage = 'group' | 'semi' | 'final';
 
-/** One Discord member's prediction, imported from the EasyPoll votes JSON. */
+/** One Discord member's prediction, imported from the EasyPoll votes JSON; `username` is lowercase and without "@". */
 export interface Ballot {
-  discordId: string;
   username: string;
   playerId: PlayerId;
 }
 
-/** EasyPoll result for "who wins this series?". Predictions never affect the bracket. */
+/**
+ * EasyPoll result for "who wins this series?", one ballot per voter so every
+ * vote feeds the prediction leaderboard; vote counts are derived from the
+ * ballots. Predictions never affect the bracket.
+ */
 export interface Poll {
-  votes: Record<PlayerId, number>;
-  /** Present only when the host imported the per-voter JSON. */
-  ballots?: Ballot[];
+  ballots: Ballot[];
   recordedAt: string;
 }
 
@@ -42,7 +44,6 @@ export type GamesPick = 'over' | 'under';
 
 /** One Discord member's over/under pick on how many games the series takes. */
 export interface GamesBallot {
-  discordId: string;
   username: string;
   pick: GamesPick;
 }
@@ -51,8 +52,7 @@ export interface GamesBallot {
 export interface GamesPoll {
   /** The line voters saw, kept with the result so changing the fixed lines later can't reinterpret old votes. */
   line: number;
-  votes: Record<GamesPick, number>;
-  ballots?: GamesBallot[];
+  ballots: GamesBallot[];
   recordedAt: string;
 }
 
@@ -101,13 +101,21 @@ export interface TieDraw {
 }
 
 export interface Tournament {
-  schemaVersion: 1;
+  schemaVersion: 2;
   /** Bumped by the server on every save; the host sends it back to detect conflicts. */
   version: number;
   updatedAt: string;
   name: string;
-  /** Empty during setup, otherwise 21, 24, 27 or 30 players. */
-  players: Player[];
+  /** Discord usernames; empty during setup, otherwise 21, 24, 27 or 30 players. */
+  players: PlayerId[];
+  /**
+   * Discord username → display name, pasted by the host as JSON. Covers
+   * participants and predictors alike (predictors needn't play), so it can
+   * list more people than `players`. Every participant has an entry, and
+   * names are unique ignoring case and leading emoji, so a winner-poll answer
+   * maps back to one username. It survives a reset.
+   */
+  displayNames: Record<string, string>;
   stage: Stage;
   /** Every series created so far, in play order. */
   series: Series[];

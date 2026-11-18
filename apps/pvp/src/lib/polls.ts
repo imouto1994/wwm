@@ -1,17 +1,18 @@
-import type { Ballot, GamesBallot, GamesPick, Player, PlayerId, Series, Tournament } from '../types/tournament.js';
+import type { Ballot, GamesBallot, GamesPick, PlayerId, Series, Tournament } from '../types/tournament.js';
 import { GAMES_LINES } from './format.js';
 import type { Translatable } from './i18n.js';
+import { nameLookup, normalizeUsername } from './names.js';
 import { isSeriesComplete, seriesWinner } from './series.js';
 
 // Discord predictions. For every series, members vote in up to two EasyPolls:
 // who wins, and (except single matches) over or under a fixed line on how many
-// games it takes. The host either types the counts or imports the
-// per-voter JSON produced by the EasyPoll converter. Predictions are
-// display-only and never affect the bracket.
+// games it takes. The host always imports the per-voter JSON produced by the
+// EasyPoll converter, so every vote feeds the prediction leaderboard and the
+// vote counts are derived from those ballots. Predictions are display-only and
+// never affect the bracket.
 
-/** One row of the converter script's output. */
+/** One row of the converter script's output, with the username already normalized. */
 export interface VoteEntry {
-  discordId: string;
   username: string;
   vote: string;
 }
@@ -25,7 +26,7 @@ export function normalizeAnswer(text: string): string {
   return (trimmed.replace(LEADING_EMOJI, '') || trimmed).replace(/\s+/g, ' ').toLowerCase();
 }
 
-/** Parses and checks the converter's JSON array. Never throws. */
+/** Parses and checks the converter's JSON array. Never throws. A `discordId` from older exports is ignored. */
 export function parseVotesJson(text: string): { ok: true; value: VoteEntry[] } | { ok: false; error: Translatable } {
   let data: unknown;
   try {
@@ -37,11 +38,10 @@ export function parseVotesJson(text: string): { ok: true; value: VoteEntry[] } |
   const entries: VoteEntry[] = [];
   for (const [index, item] of data.entries()) {
     if (typeof item !== 'object' || item === null) return { ok: false, error: (t) => t.poll.entryNotObject(index + 1) };
-    const { discordId, username, vote } = item as Record<string, unknown>;
-    if (typeof discordId !== 'string' || !discordId || typeof vote !== 'string' || !vote) {
-      return { ok: false, error: (t) => t.poll.entryMissing(index + 1) };
-    }
-    entries.push({ discordId, username: typeof username === 'string' ? username : '', vote });
+    const { username, vote } = item as Record<string, unknown>;
+    const voter = typeof username === 'string' ? normalizeUsername(username) : '';
+    if (!voter || typeof vote !== 'string' || !vote) return { ok: false, error: (t) => t.poll.entryMissing(index + 1) };
+    entries.push({ username: voter, vote });
   }
   return { ok: true, value: entries };
 }
@@ -60,11 +60,11 @@ function matchEntries<T>(entries: readonly VoteEntry[], read: (answer: string) =
   const seen = new Set<string>();
   let duplicates = 0;
   for (const entry of entries) {
-    if (seen.has(entry.discordId)) {
+    if (seen.has(entry.username)) {
       duplicates += 1;
       continue;
     }
-    seen.add(entry.discordId);
+    seen.add(entry.username);
     const value = read(entry.vote);
     if (value === undefined) unmatched.set(entry.vote, (unmatched.get(entry.vote) ?? 0) + 1);
     else matched.push({ entry, value });
@@ -72,25 +72,41 @@ function matchEntries<T>(entries: readonly VoteEntry[], read: (answer: string) =
   return { matched, unmatched: [...unmatched].map(([answer, count]) => ({ answer, count })), duplicates };
 }
 
+function countWinnerBallots(playerIds: readonly PlayerId[], ballots: readonly Ballot[]): Record<PlayerId, number> {
+  const votes: Record<PlayerId, number> = Object.fromEntries(playerIds.map((playerId) => [playerId, 0]));
+  for (const ballot of ballots) votes[ballot.playerId] += 1;
+  return votes;
+}
+
+function countGamesBallots(ballots: readonly GamesBallot[]): Record<GamesPick, number> {
+  const votes: Record<GamesPick, number> = { over: 0, under: 0 };
+  for (const ballot of ballots) votes[ballot.pick] += 1;
+  return votes;
+}
+
 export interface MatchedVotes extends Unmatched {
   votes: Record<PlayerId, number>;
   ballots: Ballot[];
 }
 
-/** Matches each "who wins?" vote to one of the series' players by name. */
-export function matchVotes(series: Series, players: readonly Player[], entries: readonly VoteEntry[]): MatchedVotes {
-  const byName = new Map<string, PlayerId>();
-  for (const playerId of series.playerIds) {
-    const player = players.find((candidate) => candidate.id === playerId);
-    if (player) byName.set(normalizeAnswer(player.name), playerId);
-  }
-  const { matched, unmatched, duplicates } = matchEntries(entries, (answer) => byName.get(normalizeAnswer(answer)));
-  const votes: Record<PlayerId, number> = Object.fromEntries(series.playerIds.map((playerId) => [playerId, 0]));
-  const ballots: Ballot[] = matched.map(({ entry, value }) => {
-    votes[value] += 1;
-    return { discordId: entry.discordId, username: entry.username, playerId: value };
-  });
-  return { votes, ballots, unmatched, duplicates };
+/**
+ * Display name → Discord username, keyed the way poll answers are compared.
+ * Display names are unique under that key (see setDisplayNames), so it's one-to-one.
+ */
+export function displayNameIndex(displayNames: Record<string, string>): Map<string, string> {
+  return new Map(Object.entries(displayNames).map(([username, name]) => [normalizeAnswer(name), username]));
+}
+
+/** Matches each "who wins?" vote to one of the series' players: the answer is a display name, read back to a username. */
+export function matchVotes(series: Series, displayNames: Record<string, string>, entries: readonly VoteEntry[]): MatchedVotes {
+  const byName = displayNameIndex(displayNames);
+  const readPlayer = (answer: string) => {
+    const playerId = byName.get(normalizeAnswer(answer));
+    return playerId !== undefined && series.playerIds.includes(playerId) ? playerId : undefined;
+  };
+  const { matched, unmatched, duplicates } = matchEntries(entries, readPlayer);
+  const ballots: Ballot[] = matched.map(({ entry, value }) => ({ username: entry.username, playerId: value }));
+  return { votes: countWinnerBallots(series.playerIds, ballots), ballots, unmatched, duplicates };
 }
 
 // Words that start an over/under answer in either language, accent-free, so
@@ -123,12 +139,8 @@ export interface MatchedGamesVotes extends Unmatched {
 
 export function matchGamesVotes(entries: readonly VoteEntry[]): MatchedGamesVotes {
   const { matched, unmatched, duplicates } = matchEntries(entries, parseGamesPick);
-  const votes: Record<GamesPick, number> = { over: 0, under: 0 };
-  const ballots: GamesBallot[] = matched.map(({ entry, value }) => {
-    votes[value] += 1;
-    return { discordId: entry.discordId, username: entry.username, pick: value };
-  });
-  return { votes, ballots, unmatched, duplicates };
+  const ballots: GamesBallot[] = matched.map(({ entry, value }) => ({ username: entry.username, pick: value }));
+  return { votes: countGamesBallots(ballots), ballots, unmatched, duplicates };
 }
 
 export interface VoteShare {
@@ -140,13 +152,10 @@ export interface VoteShare {
 
 /** Vote shares in `series.playerIds` order, or undefined when there's no poll or no votes. */
 export function voteShares(series: Series): VoteShare[] | undefined {
-  if (!series.poll) return undefined;
-  const total = series.playerIds.reduce((sum, playerId) => sum + (series.poll?.votes[playerId] ?? 0), 0);
-  if (total === 0) return undefined;
-  return series.playerIds.map((playerId) => {
-    const votes = series.poll?.votes[playerId] ?? 0;
-    return { playerId, votes, percent: Math.round((votes / total) * 100) };
-  });
+  const total = series.poll?.ballots.length ?? 0;
+  if (!series.poll || total === 0) return undefined;
+  const votes = countWinnerBallots(series.playerIds, series.poll.ballots);
+  return series.playerIds.map((playerId) => ({ playerId, votes: votes[playerId], percent: Math.round((votes[playerId] / total) * 100) }));
 }
 
 /** The player with the most votes, or undefined when nobody voted or the top is shared. */
@@ -184,16 +193,15 @@ export function gamesOutcome(series: Series): GamesOutcome | undefined {
 
 /** Over and under shares (0-100, rounded), or undefined when nobody voted. */
 export function gamesShares(series: Series): Record<GamesPick, number> | undefined {
-  const votes = series.gamesPoll?.votes;
-  const total = votes ? votes.over + votes.under : 0;
-  if (!votes || total === 0) return undefined;
-  const over = Math.round((votes.over / total) * 100);
+  const total = series.gamesPoll?.ballots.length ?? 0;
+  if (!series.gamesPoll || total === 0) return undefined;
+  const over = Math.round((countGamesBallots(series.gamesPoll.ballots).over / total) * 100);
   return { over, under: 100 - over };
 }
 
 /** The crowd's over/under pick, or undefined when nobody voted or it's an even split. */
 export function crowdGamesPick(series: Series): GamesPick | undefined {
-  const votes = series.gamesPoll?.votes;
+  const votes = series.gamesPoll && countGamesBallots(series.gamesPoll.ballots);
   if (!votes || votes.over === votes.under) return undefined;
   return votes.over > votes.under ? 'over' : 'under';
 }
@@ -227,8 +235,9 @@ export function crowdGamesRecord(tournament: Tournament): { called: number; deci
 }
 
 export interface LeaderboardEntry {
-  discordId: string;
   username: string;
+  /** The display name, else the username. */
+  name: string;
   winnerCorrect: number;
   winnerPicks: number;
   gamesCorrect: number;
@@ -237,13 +246,14 @@ export interface LeaderboardEntry {
   picks: number;
 }
 
-/** Discord members ranked by correct picks across both predictions, over finished series with imported ballots. */
+/** Discord members ranked by correct picks across both predictions, over finished series. */
 export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[] {
   const entries = new Map<string, LeaderboardEntry>();
-  const entryFor = (discordId: string, username: string) => {
-    const entry = entries.get(discordId) ?? {
-      discordId,
+  const nameOf = nameLookup(tournament);
+  const entryFor = (username: string) => {
+    const entry = entries.get(username) ?? {
       username,
+      name: nameOf(username),
       winnerCorrect: 0,
       winnerPicks: 0,
       gamesCorrect: 0,
@@ -251,15 +261,14 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
       correct: 0,
       picks: 0,
     };
-    if (username) entry.username = username;
-    entries.set(discordId, entry);
+    entries.set(username, entry);
     return entry;
   };
   for (const series of tournament.series) {
     const winner = seriesWinner(series);
     if (winner) {
       for (const ballot of series.poll?.ballots ?? []) {
-        const entry = entryFor(ballot.discordId, ballot.username);
+        const entry = entryFor(ballot.username);
         entry.winnerPicks += 1;
         if (ballot.playerId === winner) entry.winnerCorrect += 1;
       }
@@ -267,7 +276,7 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
     const outcome = gamesOutcome(series);
     if (outcome && outcome !== 'push') {
       for (const ballot of series.gamesPoll?.ballots ?? []) {
-        const entry = entryFor(ballot.discordId, ballot.username);
+        const entry = entryFor(ballot.username);
         entry.gamesPicks += 1;
         if (ballot.pick === outcome) entry.gamesCorrect += 1;
       }
@@ -278,7 +287,5 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
     entry.picks = entry.winnerPicks + entry.gamesPicks;
   }
   // Fewer picks for the same score means better accuracy, so it ranks higher.
-  return [...entries.values()]
-    .filter((entry) => entry.picks > 0)
-    .sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.username.localeCompare(b.username));
+  return [...entries.values()].filter((entry) => entry.picks > 0).sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.name.localeCompare(b.name));
 }

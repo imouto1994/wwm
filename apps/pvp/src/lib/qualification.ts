@@ -64,7 +64,7 @@ export function semifinalSelection(tournament: Tournament): SemifinalSelection {
   const winners = new Set(outcome.winners);
   const byRecord = (playerIds: PlayerId[]) => [...playerIds].sort((a, b) => compareRecords(recordOf(outcome.records, a), recordOf(outcome.records, b)));
 
-  const fillInCandidates = fillInSpots > 0 ? byRecord(tournament.players.map((player) => player.id).filter((playerId) => !winners.has(playerId))) : [];
+  const fillInCandidates = fillInSpots > 0 ? byRecord(tournament.players.filter((playerId) => !winners.has(playerId))) : [];
   const dropCandidates = dropSpots > 0 ? byRecord(outcome.winners) : [];
   const picks = tournament.semifinalPicks;
   const fillIns = (picks?.fillIns ?? []).filter((playerId) => fillInCandidates.includes(playerId)).slice(0, fillInSpots);

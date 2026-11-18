@@ -1,17 +1,16 @@
 // Turns the votes table from the EasyPoll dashboard into a list of
-// { discordId, username, vote } entries for the PvP tracker's predictions.
+// { username, vote } entries for the PvP tracker's predictions, which
+// identifies voters by Discord username.
 //
 // The dashboard has no export button, so this reads the rendered table HTML
 // copied from the browser. It is regex-based on purpose, so it runs in Node and
 // in a browser without a DOM library. That works because EasyPoll's markup is
 // generated and regular: table cells are never nested, the header row names the
-// "Answer" and "User" columns, and the voter's Discord ID only appears in the
-// hover tooltip of the User cell.
+// "Answer" and "User" columns, and the User cell shows the voter's username
+// followed by a hover tooltip (holding their numeric ID, which isn't needed).
 //
 // easypoll-devtools.js applies the same rules to the live page with DOM APIs;
 // keep the two in sync.
-
-const DISCORD_ID = /^\d{17,20}$/;
 
 // Answers can start with an emoji (EasyPoll renders it as its own text node, but
 // typed-in emoji end up in the label). Digits are deliberately not matched, so
@@ -83,21 +82,17 @@ export function parseEasyPollVotes(html) {
 
     const userCell = cells[userColumn];
     const tooltipStart = userCell.search(/<div\b[^>]*\brole="tooltip"/i);
-    const visiblePart = tooltipStart >= 0 ? userCell.slice(0, tooltipStart) : userCell;
-    const tooltipPieces = tooltipStart >= 0 ? textPieces(userCell.slice(tooltipStart)) : [];
-    // Custom avatars also carry the ID in their URL; default avatars don't.
-    const discordId = tooltipPieces.find((piece) => DISCORD_ID.test(piece)) ?? userCell.match(/\/avatars\/(\d{17,20})\//)?.[1];
-    const username = textPieces(visiblePart)[0] ?? '';
+    const username = textPieces(tooltipStart >= 0 ? userCell.slice(0, tooltipStart) : userCell)[0] ?? '';
 
-    if (!discordId) {
-      skipped.push({ row: rowNumber, reason: 'no Discord ID' });
+    if (!username) {
+      skipped.push({ row: rowNumber, reason: 'no username' });
       return;
     }
     if (!vote) {
       skipped.push({ row: rowNumber, reason: 'no answer' });
       return;
     }
-    votes.push({ discordId, username, vote });
+    votes.push({ username, vote });
   });
 
   return { votes, skipped };
@@ -105,21 +100,21 @@ export function parseEasyPollVotes(html) {
 
 /**
  * Combines votes from several pages of the same poll, keeping one vote per
- * Discord ID. The same ID with a different answer is reported in `conflicts`
+ * username. The same voter with a different answer is reported in `conflicts`
  * rather than silently resolved; the first answer is kept.
  */
 export function mergeVotes(voteLists) {
-  const byId = new Map();
+  const byUsername = new Map();
   const conflicts = [];
   for (const vote of voteLists.flat()) {
-    const existing = byId.get(vote.discordId);
+    const existing = byUsername.get(vote.username);
     if (!existing) {
-      byId.set(vote.discordId, vote);
+      byUsername.set(vote.username, vote);
     } else if (existing.vote !== vote.vote) {
-      conflicts.push({ discordId: vote.discordId, username: vote.username, votes: [existing.vote, vote.vote] });
+      conflicts.push({ username: vote.username, votes: [existing.vote, vote.vote] });
     }
   }
-  return { votes: [...byId.values()], conflicts };
+  return { votes: [...byUsername.values()], conflicts };
 }
 
 /** Vote counts per answer, most votes first. */

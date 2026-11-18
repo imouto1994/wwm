@@ -231,11 +231,11 @@ In **Vercel → Deployments**, open the **Preview** for `pvp-rehearsal` and clic
 
 ### 8.2 Rehearsal script
 
-1. `/host` → PIN → paste **21 test names**, one per line → **Save** → **Draw groups** → swap two players (tap one, then one in another group) → **Start the group stage**.
+1. `/host` → PIN → paste a **display-name JSON** (`{ "discord_username": "name" }`) with 21 test participants plus the accounts you'll vote from → **Save** → paste the **21 participants' Discord usernames**, one per line (the preview shows their names) → **Save** → **Draw groups** → swap two players (tap one, then one in another group) → **Start the group stage**.
 2. **Group 1:** **Show as live** → copy the winner poll's question and answers, then the over/under question (its line is fixed: 2.5 here) → post both as real EasyPolls in a test Discord channel → vote from 2–3 accounts.
 3. Record 2–3 games (tap winner, tap runner-up, **Save game**), including one **Undo last game**.
-4. **Import votes:** EasyPoll dashboard → the poll's votes → open the Chrome console → paste [`scripts/easypoll/easypoll-devtools.js`](../scripts/easypoll/easypoll-devtools.js) → in the host page's poll panel, paste → check the preview → **Save**.
-5. **Viewer on a phone:** now playing, vote percentages, the over/under line and recent results update within about 10 seconds. The page opens in Vietnamese; the VI / EN switch in the header changes the language.
+4. **Import votes:** EasyPoll dashboard → the poll's votes → open the Chrome console → paste [`scripts/easypoll/easypoll-devtools.js`](../scripts/easypoll/easypoll-devtools.js) → in the host page's poll panel, paste → check the preview → **Save**. Do this for both polls: the votes JSON is the only way to record them.
+5. **Viewer on a phone:** now playing, vote percentages, the over/under line and recent results update within about 10 seconds. Once Group 1 finishes, the **Discord predictions** section ranks your test accounts by their display names. The page opens in Vietnamese; the VI / EN switch in the header changes the language.
 6. **Conflict:** open `/host` in a second tab. Save a game in tab A, then make any change in tab B. Tab B shows the red banner "Another tab saved a newer version…" and loads tab A's result.
 7. **Host tools:** **Download JSON** (the file opens and has your games), **Load saves** → restore an earlier save.
 8. **Lock** returns to the PIN gate.

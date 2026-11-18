@@ -21,7 +21,7 @@ export function PredictionsPanel({ tournament }: PredictionsPanelProps) {
   return (
     <Section title={t.predictions.title}>
       <div className='flex flex-col gap-3 rounded-lg border border-border bg-surface p-4'>
-        {winnerRecord.decided === 0 && gamesRecord.decided === 0 ? (
+        {leaderboard.length === 0 && winnerRecord.decided === 0 && gamesRecord.decided === 0 ? (
           <p className='text-sm text-muted'>{t.predictions.empty}</p>
         ) : (
           <div className='flex flex-col gap-1 text-sm text-muted'>
@@ -42,9 +42,9 @@ export function PredictionsPanel({ tournament }: PredictionsPanelProps) {
             </thead>
             <tbody>
               {leaderboard.map((entry, index) => (
-                <tr key={entry.discordId} className='border-t border-border'>
+                <tr key={entry.username} className='border-t border-border'>
                   <td className='py-1.5 text-muted'>{index + 1}</td>
-                  <td className='py-1.5 text-fg'>{entry.username || entry.discordId}</td>
+                  <td className='py-1.5 text-fg'>{entry.name}</td>
                   <td className='py-1.5 text-right text-fg'>
                     {entry.winnerCorrect} <span className='text-muted'>/ {entry.winnerPicks}</span>
                   </td>

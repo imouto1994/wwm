@@ -80,7 +80,7 @@ If two players from the same first-round group would meet again, the app swaps p
 - **Wrong result**: "Undo last game" in the current series. Results in earlier stages need "Go back a stage", which removes the current stage's series.
 - **Forfeit, no-show or disconnect ruling**: "Override a series winner" with a short reason that viewers see. The override decides the series no matter what the games say.
 - **A semifinalist or finalist has to leave before their series starts**: "Replace a player". Candidates are suggested best first: for the semifinals, the best group-stage records among non-semifinalists; for the final, the other two players from that finalist's semifinal. Once a series has a game, use an override instead.
-- **Typo in a name**: "Fix a player's name". Results stay attached to the player's id.
+- **Typo in a name, or a voter missing from the leaderboard names**: edit the display names (Host tools → Display names, §2.6). Results and ballots stay attached to the username.
 
 ### 2.5 Discord predictions
 
@@ -107,12 +107,29 @@ Predictions run in **EasyPoll on Discord**, not in the app. Each series can have
 
 For each poll the host copies the question and answers from the app, posts a non-anonymous EasyPoll, and later imports the votes:
 
-1. Get the votes as a JSON array of `{ discordId, username, vote }`, either way (see [scripts/easypoll](../scripts/easypoll)):
-   - **In the browser (quickest):** on the poll's votes page in the EasyPoll dashboard, paste [`easypoll-devtools.js`](../scripts/easypoll/easypoll-devtools.js) into the Chrome DevTools console. It copies the JSON to the clipboard. If the votes span several pages, run it on each page; it merges them by Discord ID.
+1. Get the votes as a JSON array of `{ username, vote }`, either way (see [scripts/easypoll](../scripts/easypoll)):
+   - **In the browser (quickest):** on the poll's votes page in the EasyPoll dashboard, paste [`easypoll-devtools.js`](../scripts/easypoll/easypoll-devtools.js) into the Chrome DevTools console. It copies the JSON to the clipboard. If the votes span several pages, run it on each page; it merges them by username.
    - **From saved HTML:** save the votes table HTML and run `pnpm easypoll:json table.html -o votes.json`.
-2. Paste or upload the JSON in the matching section of the host page's poll panel. Winner votes are matched to a player by name (emoji prefixes and case are ignored). Over/under votes are read from the first word of the answer in either language, accents ignored: "Trên"/"Over"/"Tài" is over, "Dưới"/"Under"/"Xỉu" is under. The app previews unmatched and duplicate votes, then saves the ballots.
+2. Paste or upload the JSON in the matching section of the host page's poll panel. Winner answers are the players' display names, so each vote is read back to that player's username through the display names (emoji prefixes and case are ignored; a name of someone outside the series doesn't match). Voters are matched by username, ignoring case and a leading "@"; an older export that still carries `discordId` imports fine, the ID is ignored. Over/under votes are read from the first word of the answer in either language, accents ignored: "Trên"/"Over"/"Tài" is over, "Dưới"/"Under"/"Xỉu" is under. The app previews unmatched and duplicate votes, then saves the ballots.
 
-If only counts are known, the host can type them instead (no leaderboard credit then). Predictions **never** affect the bracket. The viewer shows vote shares and the over/under line and result on each series card, how often the crowd was right on each question, and a leaderboard of members by correct predictions (winner, over/under and total).
+**The votes JSON is the only way to record a poll.** There's no typed-counts fallback, so every recorded vote names its voter and the predictor leaderboard stays complete throughout the event. Vote counts and shares are derived from the ballots. Predictions **never** affect the bracket. The viewer shows vote shares and the over/under line and result on each series card, how often the crowd was right on each question, and a leaderboard of members by correct predictions (winner, over/under and total) that updates as each series finishes.
+
+### 2.6 Discord usernames and display names
+
+Everyone is identified by **Discord username** (the unique `@handle`, which is what EasyPoll's votes table shows): participants are entered as usernames, and the votes JSON names each voter by username. What people see is a **display name** from one list the host pastes as JSON:
+
+```json
+{ "lan.wwm": "Lan", "minh_99": "Minh" }
+```
+
+- Usernames are stored lowercase without "@", so `@Lan.WWM` and `lan.wwm` are the same person everywhere (list, participants, votes). They must follow Discord's rules: 2–32 characters of a–z, 0–9, `_` and `.`, never two dots in a row.
+- The list covers participants **and** predictors; voters don't have to play, so it can hold far more people than the tournament (up to 1,000).
+- Every participant needs an entry before the participant list can be saved, and the list can't drop a participant later.
+- Display names are 1–32 characters and unique, ignoring case and leading emoji, the same comparison the winner-poll importer uses. That makes "display name → username" one-to-one, which is how winner answers are read.
+- Saving replaces the whole list. Editing it (in setup, or later under Host tools) renames people everywhere at once, including the leaderboard; results and ballots stay attached to the username.
+- A voter missing from the list shows on the leaderboard under their username.
+- Reset keeps the list, since it's guild data rather than event results.
+- Numeric Discord IDs aren't used or stored. A member who changes their Discord username mid-event shows up as a new voter; update the list if that happens.
 
 ---
 
@@ -128,10 +145,10 @@ PvP Tournament Tracker
 │   ├── Discord predictions: crowd record on both questions + member leaderboard
 │   └── Recent results: last games, newest first
 └── /host        Host page (PIN gate, one scorekeeper device)
-    ├── Setup: event name, participant list, group draw (redraw allowed, tap-to-swap players), start group stage
+    ├── Setup: event name, display names (JSON), participants by Discord username, group draw (redraw allowed, tap-to-swap players), start group stage
     ├── Run: stage gate (semifinal picks, ties, semifinal groups to arrange, late rule, advance) → game entry + poll panel → series list → "Rearrange players" (collapsed)
     ├── Finished: champion and final result
-    └── Host tools (collapsed): override, replace, rename, go back a stage, restore a save, export JSON, reset
+    └── Host tools (collapsed): override, replace, display names, go back a stage, restore a save, export JSON, reset
 ```
 
 The path decides the page (`src/App.tsx`); there is no router library. `vercel.json` rewrites every non-API path to `index.html`.
@@ -144,11 +161,12 @@ One document, defined in [apps/pvp/src/types/tournament.ts](../apps/pvp/src/type
 
 ```typescript
 interface Tournament {
-  schemaVersion: 1;
+  schemaVersion: 2;
   version: number; // set by the server on every save
   updatedAt: string; // set by the server
   name: string;
-  players: Player[]; // [] during setup, otherwise 21, 24, 27 or 30 ({ id: 'p1', name })
+  players: PlayerId[]; // Discord usernames (lowercase, no "@"); [] during setup, otherwise 21, 24, 27 or 30
+  displayNames: Record<string, string>; // username → display name, participants and predictors (§2.6)
   stage: 'setup' | 'groups' | 'semis' | 'final' | 'done';
   series: Series[]; // every series created so far, in play order
   currentSeriesId?: string; // the "now playing" series
@@ -167,15 +185,17 @@ interface Series {
   games: { placement: [first, second, third]; savedAt: string }[];
   startedAt?: string; // set by "Show as live" or the first saved game
   winnerOverride?: { playerId: PlayerId; reason: string };
-  poll?: { votes: Record<PlayerId, number>; ballots?: { discordId; username; playerId }[]; recordedAt: string };
-  gamesPoll?: { line: number; votes: { over; under }; ballots?: { discordId; username; pick: 'over' | 'under' }[]; recordedAt: string };
+  poll?: { ballots: { username; playerId }[]; recordedAt: string }; // vote counts are derived
+  gamesPoll?: { line: number; ballots: { username; pick: 'over' | 'under' }[]; recordedAt: string };
 }
 ```
 
 Notes:
 
-- **Ballots are public**: the viewer API returns the whole document, including voters' Discord IDs and usernames, because the leaderboard needs them.
-- A tie draw's `key` is its context plus the sorted tied ids, for example `seeding:p3,p7`. The only context in use is `seeding`.
+- **Ballots and display names are public**: the viewer API returns the whole document, including voters' Discord usernames and the whole display-name list (even people who never vote), because the screens and the leaderboard need them. Numeric Discord IDs are never stored.
+- Version 1 documents stored `{ id: 'p1', name }` players and ballots with a Discord ID and username. `parseTournament` converts them on load: player ids stay as they were and their names become display names; each ballot keeps its lowercased username (or the Discord ID when the username was empty), so older data keeps working. Username format and unique names are checked only on new input (`setDisplayNames`, `setPlayers`).
+- A poll holds at least one ballot and one ballot per Discord member. Polls saved by older versions with only vote counts are dropped on load, since they can't rank anyone; re-import their JSON.
+- A tie draw's `key` is its context plus the sorted tied ids, for example `seeding:lan.wwm,minh_99`. The only context in use is `seeding`.
 - `semifinalPicks` is checked for shape only (known players, no repeats). Whether a pick still fits the results is derived: if an undone game turns a fill-in into a group winner, that pick simply stops counting and the host is asked to pick again.
 - `parseTournament` ([validate.ts](../apps/pvp/src/lib/validate.ts)) rebuilds the document from untrusted JSON and never throws. It rejects unknown players, invalid placements, games saved after a series was decided, and unsupported player counts.
 
@@ -195,7 +215,8 @@ Framework-free functions in [apps/pvp/src/lib](../apps/pvp/src/lib). They use re
 | `draw.ts`          | Fisher–Yates shuffle, random group draw                                                                  |
 | `reducer.ts`       | Every host action and stage transition; replacement candidates                                           |
 | `validate.ts`      | `parseTournament` for untrusted input                                                                    |
-| `polls.ts`         | EasyPoll JSON parsing and matching (players by name, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard |
+| `names.ts`         | Username normalizing and format check, display-name lookup with username fallback, parsing of the pasted display-name JSON |
+| `polls.ts`         | EasyPoll JSON parsing and matching (voters by username; winner answers read back to usernames through `displayNameIndex`, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard |
 | `i18n.ts`          | The English and Vietnamese message mappings, `Translatable`, and locale-aware number, time and "ago" formatting |
 | `eta.ts`           | Average minutes per game from save timestamps (gaps over 15 min ignored, at least 3 samples) and expected games left |
 
@@ -206,20 +227,21 @@ All changes go through `applyAction(tournament, action, { now, random }) → Res
 | Action                                        | Allowed when                                                    |
 | --------------------------------------------- | --------------------------------------------------------------- |
 | `setName`                                     | Any time                                                        |
-| `setPlayers`, `drawGroups`, `startGroupStage` | Setup (players must be 21/24/27/30 unique names, max 32 chars)  |
+| `setDisplayNames`                             | Any time; replaces the whole list. Discord username keys (normalized, no repeats), names 1–32 chars and unique (case and leading emoji ignored), at most 1,000, every participant kept |
+| `setPlayers`, `drawGroups`, `startGroupStage` | Setup (players must be 21/24/27/30 distinct Discord usernames, each with a display name) |
 | `startSeries`, `saveGame`, `undoGame`         | Series in the current stage, not yet decided (undo: has a game) |
 | `overrideWinner`, `clearOverride`             | Series in the current stage; reason required                    |
 | `replacePlayer`                               | Semifinal or final series with no games or override yet         |
 | `swapPlayers`                                 | Setup, group stage or semifinals; two players in different series, neither of which has a game or override (clears both series' polls) |
 | `setSemifinalPicks`                           | Group stage, every group decided; fill-ins must be non-winners, dropped players must be winners, at most the number of spots (partial picks allowed). Clears any semifinal arrangement |
 | `arrangeSemifinals`, `resetSemifinalDraft`    | Group stage, once the semifinal groups exist (picks made, ties drawn): swap two players between draft groups, or go back to the seeded groups |
-| `recordPoll`, `clearPoll`                     | Any series                                                      |
-| `recordGamesPoll`, `clearGamesPoll`           | Any series that isn't a single match; the phase's fixed line is copied into the recorded poll |
+| `recordPoll`, `clearPoll`                     | Any series; record takes the imported ballots (at least one, one per member) |
+| `recordGamesPoll`, `clearGamesPoll`           | Any series that isn't a single match; same ballot rules, and the phase's fixed line is copied into the recorded poll |
 | `resolveTies`                                 | There are pending ties (repeats while new ties surface)         |
 | `setLateRule`                                 | Before any semifinal has a result                               |
 | `advance`                                     | Every series in the stage decided, semifinal picks complete (group stage), no pending ties |
 | `reopenStage`                                 | After setup; groups → setup only while no group has results     |
-| `reset`                                       | Any time (earlier saves stay restorable)                        |
+| `reset`                                       | Any time; keeps the display names (earlier saves stay restorable) |
 
 `advance` creates the next stage's series: the semifinals (`S1`–`S3`) exactly as arranged (or seeded), first to 2 or one match under the late rule; then the grand final (`F`, first to 3); then `done`. A draft that no longer holds exactly the current semifinalists (say, after new picks) is ignored and the seeded groups are used. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draft, so nothing has to be redone. A new participant list or a redraw clears both.
 
@@ -240,13 +262,13 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 ### 6.2 Host page
 
 - **PIN gate**: the PIN is kept in `sessionStorage` for the tab and sent as the `x-host-pin` header. A wrong PIN, or a PIN changed on the server, sends the host back to the gate.
-- **Setup**: paste names one per line, save, draw groups (redraw any time before starting), adjust the draw by tapping two players in different groups to swap them, then start the group stage.
+- **Setup**: paste the display-name JSON (or choose a file) and save; paste the participants' Discord usernames one per line (with or without "@", any case), which previews their display names and flags anything that isn't a valid username, is repeated or has no display name; save, draw groups (redraw any time before starting), adjust the draw by tapping two players in different groups to swap them, then start the group stage.
 - **Rearrange players** (group stage and semifinals, collapsed under the series list): the same tap-to-swap for groups that haven't started; started groups are shown locked. In the semifinals each name shows its first-round group, and rematches are flagged.
 - **Game entry**: tap the winner, then the runner-up; third place fills itself in. Save, Undo last game, and "Show as live" to mark a series as playing before its first result. Picks clear as soon as a game is saved, so a double tap can't save it twice.
-- **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has copy-ready question and answers, a votes JSON import with preview, typed counts, and a clear button.
+- **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has copy-ready question and answers, a votes JSON import with preview (the only way to record votes), and a clear button once recorded.
 - **Stage gate** (once every series in the stage is decided): who's through; at 21, 24 or 30 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); pending seeding ties and the draw button, recent draws, the semifinal groups as viewers see them with tap-to-swap (and "Back to the seeded groups" after any swap), late-running rule checkbox, and the advance button ("Start the semifinals", "Start the grand final", "Finish the tournament").
 - **Save indicator**: "Saving…", "All changes saved", or "Not saved" with a retry button.
-- **Host tools**: see §2.4, plus "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
+- **Host tools**: see §2.4, plus "Display names" once the event has started (the same JSON editor as in setup, for typos and voters missing from the list), "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
 
 ### 6.3 Languages
 
@@ -256,7 +278,7 @@ The app speaks **Vietnamese (default) and English**, switched with the VI / EN t
 - Errors from the rules (`applyAction`), the votes JSON parser and the API come back as functions of the messages, so they render in whichever language is selected, even after switching.
 - Series names ("Bảng 3", "Bán kết 2", "Chung kết") are derived from the series id and stage. The English `label` stored in the document is kept only for older data.
 - Numbers follow the locale: "1,33 điểm/ván", "Trên 2,5 ván" in Vietnamese; "1.33 pts/game", "Over 2.5 games" in English. Times use the 24-hour clock in both.
-- Poll questions copy in the selected language. The importer reads over/under answers in either language, so a poll posted in one language and imported in the other still works.
+- Poll questions copy in the selected language. The importer reads over/under answers in either language, so a poll posted in one language and imported in the other still works. Winner answers are display names, which aren't translated.
 
 ### 6.4 Theme
 
@@ -358,9 +380,9 @@ The full step-by-step runbook, with verification, a rehearsal, event-day operati
 
 ## 9. Event-day checklist
 
-1. Before the event: open `/host`, enter the PIN, set the event name and paste the final participant list.
+1. Before the event: open `/host`, enter the PIN, set the event name, paste the display-name JSON (every participant plus everyone likely to vote), then paste the participants' Discord usernames.
 2. Draw the groups (redraw if needed, or swap individual players) and share the viewer link in Discord. The draw shows on the viewer page right away.
-3. For each series: "Show as live", post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel.
+3. For each series: "Show as live", post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel. The JSON is the only way to record votes, so import both polls for every series, ideally before it finishes, so the predictor leaderboard updates as soon as the result is saved.
 4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots, at 30 pick the winner to leave out. Then break any seeding ties with the draw button. The semifinal groups now appear for viewers: rearrange them if needed, decide on the late-running rule, and start the semifinals. Then post the semifinal polls from each series' poll panel.
 5. Download the JSON backup after each stage.
 
@@ -380,6 +402,8 @@ The full step-by-step runbook, with verification, a rehearsal, event-day operati
 - [x] Vietnamese (default) and English, from one translation mapping, with a VI / EN switch
 - [x] Viewer page: now playing, road to the semifinals, bracket, predictions, recent results
 - [x] EasyPoll dashboard table → votes JSON: DevTools console snippet and `pnpm easypoll:json`
+- [x] Votes JSON required for every poll (typed counts removed), so the predictor leaderboard covers every vote
+- [x] Participants and predictors identified by Discord username; one host-pasted username → display name list names them everywhere (schema version 2, version 1 documents converted on load)
 
 ### Phase 2 — Possible later
 

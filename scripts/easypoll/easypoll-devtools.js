@@ -2,11 +2,11 @@
 //
 // Open a poll's votes in the EasyPoll dashboard, open Chrome DevTools (Cmd+Option+J),
 // paste this whole file into the Console and press Enter. It copies a JSON array of
-// { discordId, username, vote } to the clipboard (the same format as
-// `pnpm easypoll:json`) and prints a summary to check against the dashboard.
+// { username, vote } (Discord usernames) to the clipboard, the same format as
+// `pnpm easypoll:json`, and prints a summary to check against the dashboard.
 //
 // Votes split over several pages: run it again on each page. Runs on the same
-// poll page in this tab are merged by Discord ID, and the clipboard always holds
+// poll page in this tab are merged by username, and the clipboard always holds
 // everything collected so far. Reload the page to start over.
 //
 // Chrome may ask you to type "allow pasting" before the first paste. To reuse it,
@@ -15,7 +15,6 @@
 // The parsing rules mirror parse-votes.mjs (which reads saved HTML in Node);
 // keep the two in sync.
 (() => {
-  const DISCORD_ID = /^\d{17,20}$/;
   // Strips a leading emoji from the answer label but keeps leading digits ("10naichuoi9").
   const LEADING_EMOJI = /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u200d\ufe0f\u20e3\s]+/u;
 
@@ -57,30 +56,23 @@
     const label = textPieces(answerCell).at(-1) ?? '';
     const vote = label.replace(LEADING_EMOJI, '') || label;
 
-    // The ID only appears in the User cell's hover tooltip; custom avatars also carry it in their URL.
-    const tooltip = userCell.querySelector('[role="tooltip"]');
-    const discordId =
-      (tooltip ? textPieces(tooltip) : []).find((piece) => DISCORD_ID.test(piece)) ??
-      userCell
-        .querySelector('img[src*="/avatars/"]')
-        ?.getAttribute('src')
-        .match(/\/avatars\/(\d{17,20})\//)?.[1];
-    const username = textPieces(userCell, tooltip)[0] ?? '';
+    // The username is the cell's visible text; its hover tooltip (the numeric ID) is skipped.
+    const username = textPieces(userCell, userCell.querySelector('[role="tooltip"]'))[0] ?? '';
 
-    if (!discordId) skipped.push(`row ${index + 1} (${username || 'unknown user'}): no Discord ID`);
+    if (!username) skipped.push(`row ${index + 1}: no username`);
     else if (!vote) skipped.push(`row ${index + 1} (${username}): no answer`);
-    else pageVotes.push({ discordId, username, vote });
+    else pageVotes.push({ username, vote });
   });
 
   // Keyed by path so another poll opened in the same tab starts fresh. On the same
   // voter, this page wins: it is the newest read of the dashboard.
   const stash = (window.__easypollVotes ??= {});
-  const collected = new Map((stash[location.pathname] ?? []).map((entry) => [entry.discordId, entry]));
+  const collected = new Map((stash[location.pathname] ?? []).map((entry) => [entry.username, entry]));
   const changed = [];
   for (const entry of pageVotes) {
-    const earlier = collected.get(entry.discordId);
-    if (earlier && earlier.vote !== entry.vote) changed.push(`${entry.username || entry.discordId}: ${earlier.vote} -> ${entry.vote}`);
-    collected.set(entry.discordId, entry);
+    const earlier = collected.get(entry.username);
+    if (earlier && earlier.vote !== entry.vote) changed.push(`${entry.username}: ${earlier.vote} -> ${entry.vote}`);
+    collected.set(entry.username, entry);
   }
   const votes = [...collected.values()];
   stash[location.pathname] = votes;

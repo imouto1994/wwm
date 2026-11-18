@@ -1,4 +1,5 @@
 import { Button } from '@/components/Button';
+import { DisplayNamesEditor } from '@/components/host/DisplayNamesEditor';
 import type { HostController } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import { describeApiError, fetchHistory } from '@/lib/apiClient';
@@ -47,8 +48,6 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const [replaceSeriesId, setReplaceSeriesId] = useState('');
   const [outId, setOutId] = useState('');
   const [inId, setInId] = useState('');
-  const [renameId, setRenameId] = useState('');
-  const [newName, setNewName] = useState('');
   const [history, setHistory] = useState<Tournament[] | null>(null);
   const [historyError, setHistoryError] = useState<Translatable>();
   const [resetText, setResetText] = useState('');
@@ -161,27 +160,9 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
           </Tool>
         )}
 
-        {tournament.players.length > 0 && (
-          <Tool title={t.tools.renameTitle} description={t.tools.renameHelp}>
-            <select
-              value={renameId}
-              onChange={(event) => {
-                setRenameId(event.target.value);
-                setNewName(nameOf(event.target.value));
-              }}
-              className={inputClass}
-            >
-              <option value=''>{t.tools.player}</option>
-              {tournament.players.map((player) => (
-                <option key={player.id} value={player.id}>
-                  {player.name}
-                </option>
-              ))}
-            </select>
-            <input value={newName} onChange={(event) => setNewName(event.target.value)} className={inputClass} disabled={!renameId} />
-            <Button disabled={!renameId || !newName.trim()} onClick={() => host.dispatch({ type: 'renamePlayer', playerId: renameId, name: newName })}>
-              {t.tools.rename}
-            </Button>
+        {tournament.stage !== 'setup' && (
+          <Tool title={`${t.names.title} · ${t.names.count(Object.keys(tournament.displayNames).length)}`} description={t.names.help}>
+            <DisplayNamesEditor host={host} tournament={tournament} />
           </Tool>
         )}
 

@@ -1,8 +1,9 @@
-import type { Ballot, GamesBallot, GamesPick, Placement, PlayerId, Series, SeriesStage, Stage, TieDraw, Tournament } from '../types/tournament.js';
+import type { Ballot, GamesBallot, Placement, PlayerId, Series, SeriesStage, Stage, TieDraw, Tournament } from '../types/tournament.js';
 import { type Random, drawGroupSeries, shuffle } from './draw.js';
 import { SUPPORTED_COUNTS, WINS_NEEDED, formatFor, isSupportedCount } from './format.js';
 import type { Translatable } from './i18n.js';
-import { gamesLineOf, hasGamesPrediction } from './polls.js';
+import { MAX_DISPLAY_NAME, MAX_DISPLAY_NAMES, isDiscordUsername, nameLookup, normalizeUsername } from './names.js';
+import { gamesLineOf, hasGamesPrediction, normalizeAnswer } from './polls.js';
 import { groupSeries, groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom } from './qualification.js';
 import { compareRecords } from './ranking.js';
 import { type PlayerRecord, isSeriesComplete, isValidPlacement, seriesRecords, seriesWinner } from './series.js';
@@ -15,7 +16,6 @@ const emptyRecord = (playerId: PlayerId): PlayerRecord => ({ playerId, wins: 0, 
 // Errors are `Translatable`s, so the host sees them in the selected language.
 
 export const DEFAULT_EVENT_NAME = 'Guild PvP Tournament';
-const MAX_PLAYER_NAME = 32;
 const MAX_EVENT_NAME = 60;
 const MAX_REASON = 120;
 
@@ -29,8 +29,8 @@ export type ActionResult = { ok: true; value: Tournament } | { ok: false; error:
 
 export type Action =
   | { type: 'setName'; name: string }
-  | { type: 'setPlayers'; playerNames: string[] }
-  | { type: 'renamePlayer'; playerId: PlayerId; name: string }
+  | { type: 'setDisplayNames'; displayNames: Record<string, string> }
+  | { type: 'setPlayers'; usernames: string[] }
   | { type: 'drawGroups' }
   | { type: 'startGroupStage' }
   | { type: 'startSeries'; seriesId: string }
@@ -43,9 +43,9 @@ export type Action =
   | { type: 'setSemifinalPicks'; fillIns: PlayerId[]; dropped: PlayerId[] }
   | { type: 'arrangeSemifinals'; firstId: PlayerId; secondId: PlayerId }
   | { type: 'resetSemifinalDraft' }
-  | { type: 'recordPoll'; seriesId: string; votes: Record<PlayerId, number>; ballots?: Ballot[] }
+  | { type: 'recordPoll'; seriesId: string; ballots: Ballot[] }
   | { type: 'clearPoll'; seriesId: string }
-  | { type: 'recordGamesPoll'; seriesId: string; votes: Record<GamesPick, number>; ballots?: GamesBallot[] }
+  | { type: 'recordGamesPoll'; seriesId: string; ballots: GamesBallot[] }
   | { type: 'clearGamesPoll'; seriesId: string }
   | { type: 'resolveTies' }
   | { type: 'setLateRule'; enabled: boolean }
@@ -63,7 +63,7 @@ export const STAGE_SERIES: Record<Stage, SeriesStage | undefined> = {
 };
 
 export function createEmptyTournament(name: string = DEFAULT_EVENT_NAME): Tournament {
-  return { schemaVersion: 1, version: 0, updatedAt: '', name, players: [], stage: 'setup', series: [], lateRule: false, tieDraws: [] };
+  return { schemaVersion: 2, version: 0, updatedAt: '', name, players: [], displayNames: {}, stage: 'setup', series: [], lateRule: false, tieDraws: [] };
 }
 
 /** Series the host can play right now. */
@@ -106,7 +106,62 @@ export function cleanName(raw: string): string {
 }
 
 function playerName(tournament: Tournament, playerId: PlayerId): string {
-  return tournament.players.find((player) => player.id === playerId)?.name ?? playerId;
+  return nameLookup(tournament)(playerId);
+}
+
+const list = (items: Iterable<string>) => [...new Set(items)].join(', ');
+
+const repeatsIn = (items: readonly string[]) => items.filter((item, index) => items.indexOf(item) !== index);
+
+/**
+ * Replaces the whole Discord username → display name list. Winner-poll
+ * answers are display names read back to a username, so names must stay
+ * unique under the same comparison the poll importer uses, and no participant
+ * may lose theirs.
+ */
+function setDisplayNames(tournament: Tournament, input: Record<string, string>): ActionResult {
+  const entries = Object.entries(input).map(([username, name]) => [normalizeUsername(username), cleanName(name)] as const);
+  if (entries.length > MAX_DISPLAY_NAMES) return fail((t) => t.errors.tooManyDisplayNames(MAX_DISPLAY_NAMES));
+  const usernames = entries.map(([username]) => username);
+  const invalid = usernames.filter((username) => !isDiscordUsername(username));
+  if (invalid.length > 0) return fail((t) => t.errors.notUsernames(list(invalid)));
+  // "Lan" and "@lan" are the same Discord account once normalized.
+  const repeated = repeatsIn(usernames);
+  if (repeated.length > 0) return fail((t) => t.errors.duplicateUsernames(list(repeated)));
+  const empty = entries.filter(([, name]) => !name).map(([username]) => username);
+  if (empty.length > 0) return fail((t) => t.errors.displayNamesEmpty(list(empty)));
+  const tooLong = entries.filter(([, name]) => name.length > MAX_DISPLAY_NAME).map(([, name]) => name);
+  if (tooLong.length > 0) return fail((t) => t.errors.displayNamesTooLong(list(tooLong), MAX_DISPLAY_NAME));
+  const firstByKey = new Map<string, string>();
+  const clashes: string[] = [];
+  for (const [, name] of entries) {
+    const key = normalizeAnswer(name);
+    const first = firstByKey.get(key);
+    if (first === undefined) firstByKey.set(key, name);
+    else clashes.push(first, name);
+  }
+  if (clashes.length > 0) return fail((t) => t.errors.duplicateDisplayNames(list(clashes)));
+  const displayNames = Object.fromEntries(entries);
+  const named = new Set(Object.keys(displayNames));
+  const unnamed = tournament.players.filter((playerId) => !named.has(playerId));
+  if (unnamed.length > 0)
+    return fail((t) => t.errors.participantsNeedNames(list(unnamed.map((playerId) => `${playerId} (${playerName(tournament, playerId)})`))));
+  return ok({ ...tournament, displayNames });
+}
+
+/** Participants are entered by Discord username; each needs a display name first so every screen and poll can name them. */
+function setPlayers(tournament: Tournament, input: string[]): ActionResult {
+  if (tournament.stage !== 'setup') return fail((t) => t.errors.playersOnlyInSetup);
+  const players = input.map(normalizeUsername).filter(Boolean);
+  const invalid = players.filter((username) => !isDiscordUsername(username));
+  if (invalid.length > 0) return fail((t) => t.errors.notUsernames(list(invalid)));
+  const repeated = repeatsIn(players);
+  if (repeated.length > 0) return fail((t) => t.errors.duplicateUsernames(list(repeated)));
+  if (!isSupportedCount(players.length)) return fail((t) => t.errors.wrongCount(SUPPORTED_COUNTS.join(', '), players.length));
+  const named = new Set(Object.keys(tournament.displayNames));
+  const unnamed = players.filter((username) => !named.has(username));
+  if (unnamed.length > 0) return fail((t) => t.errors.namesNeededFirst(list(unnamed)));
+  return ok({ ...withoutSemifinalPlan(tournament), players, series: [], currentSeriesId: undefined, tieDraws: [] });
 }
 
 function findSeries(tournament: Tournament, seriesId: string): Series | undefined {
@@ -281,25 +336,20 @@ function resolveTies(tournament: Tournament, context: ActionContext): ActionResu
   return current === tournament ? fail((t) => t.errors.noTies) : ok(current);
 }
 
-const isVoteCount = (count: number) => Number.isInteger(count) && count >= 0;
-const hasRepeatVoters = (ballots: readonly { discordId: string }[]) => new Set(ballots.map((ballot) => ballot.discordId)).size !== ballots.length;
+/** Checks shared by both predictions; only the per-voter import is accepted so every vote reaches the leaderboard. */
+function ballotsProblem(ballots: readonly { username: string }[]): Translatable | undefined {
+  if (ballots.length === 0) return (t) => t.errors.noBallots;
+  if (repeatsIn(ballots.map((ballot) => ballot.username)).length > 0) return (t) => t.errors.oneVotePerMember;
+  return undefined;
+}
 
-function recordPoll(tournament: Tournament, seriesId: string, votes: Record<PlayerId, number>, ballots: Ballot[] | undefined, now: string): ActionResult {
+function recordPoll(tournament: Tournament, seriesId: string, ballots: Ballot[], now: string): ActionResult {
   const series = findSeries(tournament, seriesId);
   if (!series) return fail((t) => t.errors.unknownSeries(seriesId));
-  const members = new Set(series.playerIds);
-  const cleanVotes: Record<PlayerId, number> = {};
-  for (const playerId of series.playerIds) {
-    const count = votes[playerId] ?? 0;
-    if (!isVoteCount(count)) return fail((t) => t.errors.voteCountsWhole);
-    cleanVotes[playerId] = count;
-  }
-  if (Object.keys(votes).some((playerId) => !members.has(playerId))) return fail((t) => t.errors.votesOutsideSeries);
-  if (ballots) {
-    if (ballots.some((ballot) => !members.has(ballot.playerId))) return fail((t) => t.errors.ballotOutsideSeries);
-    if (hasRepeatVoters(ballots)) return fail((t) => t.errors.oneVotePerMember);
-  }
-  return ok(withSeries(tournament, seriesId, (current) => ({ ...current, poll: { votes: cleanVotes, ...(ballots ? { ballots } : {}), recordedAt: now } })));
+  const problem = ballotsProblem(ballots);
+  if (problem) return fail(problem);
+  if (ballots.some((ballot) => !series.playerIds.includes(ballot.playerId))) return fail((t) => t.errors.ballotOutsideSeries);
+  return ok(withSeries(tournament, seriesId, (current) => ({ ...current, poll: { ballots, recordedAt: now } })));
 }
 
 /** Series that can carry the over/under prediction, or why not. */
@@ -310,22 +360,13 @@ function gamesSeriesOrError(tournament: Tournament, seriesId: string): Series | 
   return series;
 }
 
-function recordGamesPoll(
-  tournament: Tournament,
-  seriesId: string,
-  votes: Record<GamesPick, number>,
-  ballots: GamesBallot[] | undefined,
-  now: string
-): ActionResult {
+function recordGamesPoll(tournament: Tournament, seriesId: string, ballots: GamesBallot[], now: string): ActionResult {
   const series = gamesSeriesOrError(tournament, seriesId);
   if (typeof series === 'function') return fail(series);
-  if (!isVoteCount(votes.over) || !isVoteCount(votes.under)) return fail((t) => t.errors.voteCountsWhole);
-  if (ballots) {
-    if (ballots.some((ballot) => ballot.pick !== 'over' && ballot.pick !== 'under')) return fail((t) => t.errors.ballotPickInvalid);
-    if (hasRepeatVoters(ballots)) return fail((t) => t.errors.oneVotePerMember);
-  }
-  const gamesPoll = { line: gamesLineOf(series), votes: { over: votes.over, under: votes.under }, ...(ballots ? { ballots } : {}), recordedAt: now };
-  return ok(withSeries(tournament, series.id, (current) => ({ ...current, gamesPoll })));
+  const problem = ballotsProblem(ballots);
+  if (problem) return fail(problem);
+  if (ballots.some((ballot) => ballot.pick !== 'over' && ballot.pick !== 'under')) return fail((t) => t.errors.ballotPickInvalid);
+  return ok(withSeries(tournament, series.id, (current) => ({ ...current, gamesPoll: { line: gamesLineOf(series), ballots, recordedAt: now } })));
 }
 
 export function applyAction(tournament: Tournament, action: Action, context: ActionContext): ActionResult {
@@ -337,42 +378,16 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       return ok({ ...tournament, name });
     }
 
-    case 'setPlayers': {
-      if (tournament.stage !== 'setup') return fail((t) => t.errors.playersOnlyInSetup);
-      const names = action.playerNames.map(cleanName).filter(Boolean);
-      if (!isSupportedCount(names.length)) return fail((t) => t.errors.wrongCount(SUPPORTED_COUNTS.join(', '), names.length));
-      const tooLong = names.find((name) => name.length > MAX_PLAYER_NAME);
-      if (tooLong) return fail((t) => t.errors.nameTooLong(tooLong, MAX_PLAYER_NAME));
-      const seen = new Set<string>();
-      const duplicates = new Set<string>();
-      for (const name of names) {
-        const key = name.toLowerCase();
-        if (seen.has(key)) duplicates.add(name);
-        seen.add(key);
-      }
-      if (duplicates.size > 0) return fail((t) => t.errors.duplicateNames([...duplicates].join(', ')));
-      const players = names.map((name, index) => ({ id: `p${index + 1}`, name }));
-      return ok({ ...withoutSemifinalPlan(tournament), players, series: [], currentSeriesId: undefined, tieDraws: [] });
-    }
+    case 'setDisplayNames':
+      return setDisplayNames(tournament, action.displayNames);
 
-    case 'renamePlayer': {
-      const name = cleanName(action.name);
-      if (!tournament.players.some((player) => player.id === action.playerId)) return fail((t) => t.errors.unknownPlayer);
-      if (!name) return fail((t) => t.errors.nameEmpty);
-      if (name.length > MAX_PLAYER_NAME) return fail((t) => t.errors.namesTooLong(MAX_PLAYER_NAME));
-      if (tournament.players.some((player) => player.id !== action.playerId && player.name.toLowerCase() === name.toLowerCase())) {
-        return fail((t) => t.errors.nameTaken(name));
-      }
-      return ok({ ...tournament, players: tournament.players.map((player) => (player.id === action.playerId ? { ...player, name } : player)) });
-    }
+    case 'setPlayers':
+      return setPlayers(tournament, action.usernames);
 
     case 'drawGroups': {
       if (tournament.stage !== 'setup') return fail((t) => t.errors.drawOnlyInSetup);
       if (!isSupportedCount(tournament.players.length)) return fail((t) => t.errors.saveParticipantsFirst);
-      const groups = drawGroupSeries(
-        tournament.players.map((player) => player.id),
-        context.random
-      );
+      const groups = drawGroupSeries(tournament.players, context.random);
       return ok({ ...withoutSemifinalPlan(tournament), series: groups, currentSeriesId: undefined, tieDraws: [] });
     }
 
@@ -435,7 +450,7 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       if (series.stage !== 'semi' && series.stage !== 'final') return fail((t) => t.errors.replaceOnlyKnockout);
       if (series.games.length > 0 || series.winnerOverride) return fail((t) => t.errors.replaceStarted(t.seriesName(series)));
       if (!series.playerIds.includes(action.outId)) return fail((t) => t.errors.notInSeries);
-      if (!tournament.players.some((player) => player.id === action.inId)) return fail((t) => t.errors.unknownReplacement);
+      if (!tournament.players.includes(action.inId)) return fail((t) => t.errors.unknownReplacement);
       if (playableSeries(tournament).some((current) => current.playerIds.includes(action.inId))) {
         return fail((t) => t.errors.alreadyPlaying(playerName(tournament, action.inId)));
       }
@@ -461,7 +476,7 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       return ok(withoutDraft(tournament));
 
     case 'recordPoll':
-      return recordPoll(tournament, action.seriesId, action.votes, action.ballots, context.now);
+      return recordPoll(tournament, action.seriesId, action.ballots, context.now);
 
     case 'clearPoll': {
       const series = findSeries(tournament, action.seriesId);
@@ -470,7 +485,7 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
     }
 
     case 'recordGamesPoll':
-      return recordGamesPoll(tournament, action.seriesId, action.votes, action.ballots, context.now);
+      return recordGamesPoll(tournament, action.seriesId, action.ballots, context.now);
 
     case 'clearGamesPoll': {
       const series = findSeries(tournament, action.seriesId);
@@ -500,7 +515,13 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       return reopenStage(tournament);
 
     case 'reset':
-      return ok({ ...createEmptyTournament(tournament.name), version: tournament.version, updatedAt: tournament.updatedAt });
+      // The display names are a guild-wide list rather than event results, so they stay.
+      return ok({
+        ...createEmptyTournament(tournament.name),
+        displayNames: tournament.displayNames,
+        version: tournament.version,
+        updatedAt: tournament.updatedAt,
+      });
   }
 }
 
@@ -525,10 +546,7 @@ export function replacementCandidates(tournament: Tournament, seriesId: string, 
     );
   }
   if (series.stage === 'semi') {
-    return byRecord(
-      groupStageOutcome(tournament).records,
-      tournament.players.map((player) => player.id)
-    );
+    return byRecord(groupStageOutcome(tournament).records, tournament.players);
   }
   return [];
 }

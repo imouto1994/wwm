@@ -1,15 +1,15 @@
 import { Button } from '@/components/Button';
+import { RearrangePanel } from '@/components/host/RearrangePanel';
 import { SemifinalPicker } from '@/components/host/SemifinalPicker';
 import type { HostController } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import type { Messages } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
-import { groupSeries, groupStageOutcome, pendingTies, seedingOrder, semifinalSelection } from '@/lib/qualification';
+import { groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom } from '@/lib/qualification';
 import { championOf, nextStage, playableSeries } from '@/lib/reducer';
-import { seedSemifinalGroups } from '@/lib/seeding';
 import { seriesWinner } from '@/lib/series';
-import type { PlayerId, Tournament } from '@/types/tournament';
-import { ChevronRight, Dice5 } from 'lucide-react';
+import type { Tournament } from '@/types/tournament';
+import { ChevronRight, Dice5, RotateCcw } from 'lucide-react';
 
 interface StageGateProps {
   host: HostController;
@@ -22,19 +22,11 @@ function tieContext(key: string, t: Messages): string {
   return context === 'seeding' ? t.gate.seedingTie : context;
 }
 
-/** The semifinal groups that advancing would create, shown before the host commits. */
-function semifinalPreview(tournament: Tournament, semifinalists: PlayerId[] | undefined): PlayerId[][] | undefined {
-  if (!semifinalists || semifinalists.length !== 9) return undefined;
-  const seeding = seedingOrder(tournament, semifinalists);
-  if (seeding.ties.length > 0) return undefined;
-  const origin = new Map(groupSeries(tournament).flatMap((series) => series.playerIds.map((playerId) => [playerId, series.id] as const)));
-  return seedSemifinalGroups(seeding.order, (playerId) => origin.get(playerId));
-}
-
 /**
  * Shown once every series in the stage is finished: who goes through, the
  * host's semifinal picks (21, 24 and 30 players), any seeding ties that need
- * an on-screen draw, the late-running rule, and the button to move on.
+ * an on-screen draw, the semifinal groups to arrange (already public), the
+ * late-running rule, and the button to move on.
  */
 export function StageGate({ host, tournament }: StageGateProps) {
   const { t } = useI18n();
@@ -45,7 +37,7 @@ export function StageGate({ host, tournament }: StageGateProps) {
   const isGroupStage = tournament.stage === 'groups';
   const selection = isGroupStage ? semifinalSelection(tournament) : undefined;
   const picksMissing = Boolean(selection && !selection.semifinalists);
-  const preview = isGroupStage && ties.length === 0 ? semifinalPreview(tournament, selection?.semifinalists) : undefined;
+  const draftGroups = isGroupStage ? semifinalGroups(tournament) : undefined;
   const recentDraws = tournament.tieDraws.slice(-4).reverse();
 
   let summary: string | undefined;
@@ -100,14 +92,22 @@ export function StageGate({ host, tournament }: StageGateProps) {
         </div>
       )}
 
-      {preview && (
-        <div className='flex flex-col gap-1 text-sm'>
-          <p className='text-muted'>{t.gate.preview}</p>
-          {preview.map((group, index) => (
-            <p key={group.join()} className='text-fg'>
-              {t.seriesName({ id: `S${index + 1}`, stage: 'semi' })}: {group.map(nameOf).join(', ')}
-            </p>
-          ))}
+      {draftGroups && (
+        <div className='flex flex-col gap-2'>
+          <p className='text-sm text-fg'>{t.gate.preview}</p>
+          <RearrangePanel
+            host={host}
+            tournament={tournament}
+            series={semifinalSeriesFrom(draftGroups, tournament.lateRule)}
+            onSwap={(firstId, secondId) => host.dispatch({ type: 'arrangeSemifinals', firstId, secondId })}
+          />
+          {tournament.semifinalDraft && (
+            <div>
+              <Button onClick={() => host.dispatch({ type: 'resetSemifinalDraft' })}>
+                <RotateCcw size={14} /> {t.gate.resetDraft}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

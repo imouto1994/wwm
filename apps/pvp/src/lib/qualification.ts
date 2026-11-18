@@ -1,6 +1,7 @@
 import type { PlayerId, Series, Tournament } from '../types/tournament.js';
 import { formatFor, isSupportedCount } from './format.js';
 import { type Tie, compareRecords, rankRecords } from './ranking.js';
+import { seedSemifinalGroups } from './seeding.js';
 import { type PlayerRecord, seriesRecords, seriesWinner } from './series.js';
 
 export interface GroupStageOutcome {
@@ -82,6 +83,38 @@ export function seedingOrder(tournament: Tournament, semifinalists: readonly Pla
     'seeding',
     tournament.tieDraws
   );
+}
+
+/**
+ * The semifinal groups as they stand before the semifinals start: the host's
+ * arrangement when it still holds exactly the current semifinalists,
+ * otherwise the seeded groups. Undefined until the group stage, the host's
+ * picks and the seeding draws are all done. Viewers see this too.
+ */
+export function semifinalGroups(tournament: Tournament): PlayerId[][] | undefined {
+  const { semifinalists } = semifinalSelection(tournament);
+  if (!semifinalists) return undefined;
+  const draft = tournament.semifinalDraft;
+  if (draft) {
+    const members = new Set(draft.flat());
+    if (members.size === semifinalists.length && semifinalists.every((playerId) => members.has(playerId))) return draft.map((group) => [...group]);
+  }
+  const seeding = seedingOrder(tournament, semifinalists);
+  if (seeding.ties.length > 0) return undefined;
+  const firstRoundGroup = new Map(groupSeries(tournament).flatMap((series) => series.playerIds.map((playerId) => [playerId, series.id] as const)));
+  return seedSemifinalGroups(seeding.order, (playerId) => firstRoundGroup.get(playerId));
+}
+
+/** Semifinal series for a set of groups; used both to start the semifinals and to preview them. */
+export function semifinalSeriesFrom(groups: readonly PlayerId[][], lateRule: boolean): Series[] {
+  return groups.map((playerIds, index) => ({
+    id: `S${index + 1}`,
+    stage: 'semi',
+    label: `Semifinal ${index + 1}`,
+    playerIds: [playerIds[0], playerIds[1], playerIds[2]],
+    winsNeeded: lateRule ? 1 : 2,
+    games: [],
+  }));
 }
 
 /** Seeding ties blocking the semifinals. Known only once the host's picks are complete. */

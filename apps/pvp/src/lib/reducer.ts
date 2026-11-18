@@ -3,9 +3,8 @@ import { type Random, drawGroupSeries, shuffle } from './draw.js';
 import { SUPPORTED_COUNTS, formatFor, isSupportedCount, isValidGamesLine } from './format.js';
 import type { Translatable } from './i18n.js';
 import { gamesLineOf, hasGamesPrediction } from './polls.js';
-import { groupSeries, groupStageOutcome, pendingTies, seedingOrder, semifinalSelection } from './qualification.js';
+import { groupSeries, groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom } from './qualification.js';
 import { compareRecords } from './ranking.js';
-import { seedSemifinalGroups } from './seeding.js';
 import { type PlayerRecord, isSeriesComplete, isValidPlacement, seriesRecords, seriesWinner } from './series.js';
 
 const emptyRecord = (playerId: PlayerId): PlayerRecord => ({ playerId, wins: 0, points: 0, games: 0 });
@@ -42,6 +41,8 @@ export type Action =
   | { type: 'replacePlayer'; seriesId: string; outId: PlayerId; inId: PlayerId }
   | { type: 'swapPlayers'; firstId: PlayerId; secondId: PlayerId }
   | { type: 'setSemifinalPicks'; fillIns: PlayerId[]; dropped: PlayerId[] }
+  | { type: 'arrangeSemifinals'; firstId: PlayerId; secondId: PlayerId }
+  | { type: 'resetSemifinalDraft' }
   | { type: 'recordPoll'; seriesId: string; votes: Record<PlayerId, number>; ballots?: Ballot[] }
   | { type: 'clearPoll'; seriesId: string }
   | { type: 'setGamesLine'; seriesId: string; line: number }
@@ -117,9 +118,34 @@ function withSeries(tournament: Tournament, seriesId: string, update: (series: S
   return { ...tournament, series: tournament.series.map((series) => (series.id === seriesId ? update(series) : series)) };
 }
 
-/** A new participant list or group draw makes earlier semifinal picks meaningless. */
-function withoutPicks({ semifinalPicks: _cleared, ...tournament }: Tournament): Tournament {
+/** A new participant list or group draw makes earlier semifinal picks and arrangements meaningless. */
+function withoutSemifinalPlan({ semifinalPicks: _picks, semifinalDraft: _draft, ...tournament }: Tournament): Tournament {
   return tournament;
+}
+
+function withoutDraft({ semifinalDraft: _cleared, ...tournament }: Tournament): Tournament {
+  return tournament;
+}
+
+/**
+ * Swaps two players between the semifinal groups before the semifinals start.
+ * The arrangement is saved as a draft, so viewers watch it take shape and
+ * `advance` starts exactly these groups.
+ */
+function arrangeSemifinals(tournament: Tournament, firstId: PlayerId, secondId: PlayerId): ActionResult {
+  const groups = tournament.stage === 'groups' ? semifinalGroups(tournament) : undefined;
+  if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
+  const firstGroup = groups.findIndex((group) => group.includes(firstId));
+  const secondGroup = groups.findIndex((group) => group.includes(secondId));
+  if (firstGroup < 0 || secondGroup < 0) return fail((t) => t.errors.notSemifinalists);
+  if (firstGroup === secondGroup) {
+    return fail((t) =>
+      t.errors.sameGroup(playerName(tournament, firstId), playerName(tournament, secondId), t.seriesName({ id: `S${firstGroup + 1}`, stage: 'semi' }))
+    );
+  }
+  const swapIn = (playerId: PlayerId) => (playerId === firstId ? secondId : playerId === secondId ? firstId : playerId);
+  const semifinalDraft = groups.map((group) => group.map(swapIn) as [PlayerId, PlayerId, PlayerId]);
+  return ok({ ...tournament, semifinalDraft });
 }
 
 /**
@@ -174,7 +200,8 @@ function setSemifinalPicks(tournament: Tournament, fillIns: PlayerId[], dropped:
   }
   if (uniqueFillIns.some((playerId) => !selection.fillInCandidates.includes(playerId))) return fail((t) => t.errors.fillInNotWinner);
   if (uniqueDropped.some((playerId) => !selection.dropCandidates.includes(playerId))) return fail((t) => t.errors.dropMustBeWinner);
-  return ok({ ...tournament, semifinalPicks: { fillIns: uniqueFillIns, dropped: uniqueDropped } });
+  // Different picks mean different semifinalists, so any arrangement starts over from the seeding.
+  return ok({ ...withoutDraft(tournament), semifinalPicks: { fillIns: uniqueFillIns, dropped: uniqueDropped } });
 }
 
 /** Results can only change in the stage being played; earlier stages need `reopenStage` first. */
@@ -185,20 +212,12 @@ function playableOrError(tournament: Tournament, seriesId: string): Series | Tra
   return series;
 }
 
-function createSemifinals(tournament: Tournament, semifinalists: PlayerId[]): ActionResult {
-  const seeding = seedingOrder(tournament, semifinalists);
-  if (seeding.ties.length > 0) return fail((t) => t.errors.resolveTiesFirst);
-  const firstRoundGroup = new Map(groupSeries(tournament).flatMap((series) => series.playerIds.map((playerId) => [playerId, series.id] as const)));
-  const groups = seedSemifinalGroups(seeding.order, (playerId) => firstRoundGroup.get(playerId));
-  const semis: Series[] = groups.map((playerIds, index) => ({
-    id: `S${index + 1}`,
-    stage: 'semi',
-    label: `Semifinal ${index + 1}`,
-    playerIds: playerIds as [PlayerId, PlayerId, PlayerId],
-    winsNeeded: tournament.lateRule ? 1 : 2,
-    games: [],
-  }));
-  return ok({ ...tournament, stage: 'semis', series: [...tournament.series, ...semis], currentSeriesId: undefined });
+/** Starts the semifinals from the groups as arranged (or seeded); the draft lives on in the series themselves. */
+function createSemifinals(tournament: Tournament): ActionResult {
+  const groups = semifinalGroups(tournament);
+  if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
+  const semis = semifinalSeriesFrom(groups, tournament.lateRule);
+  return ok({ ...withoutDraft(tournament), stage: 'semis', series: [...tournament.series, ...semis], currentSeriesId: undefined });
 }
 
 function advance(tournament: Tournament): ActionResult {
@@ -210,7 +229,7 @@ function advance(tournament: Tournament): ActionResult {
     const { semifinalists, fillInSpots, dropSpots } = semifinalSelection(tournament);
     if (!semifinalists) return fail((t) => (dropSpots > 0 ? t.errors.pickDropFirst : t.errors.pickFillInsFirst(fillInSpots)));
     if (pendingTies(tournament).length > 0) return fail((t) => t.errors.resolveTiesFirst);
-    return createSemifinals(tournament, semifinalists);
+    return createSemifinals(tournament);
   }
 
   if (tournament.stage === 'semis') {
@@ -239,8 +258,11 @@ function reopenStage(tournament: Tournament): ActionResult {
         return fail((t) => t.errors.groupsHaveResults);
       }
       return ok({ ...tournament, stage: 'setup', currentSeriesId: undefined });
-    case 'semis':
-      return ok({ ...tournament, stage: 'groups', series: removeStage('semi'), currentSeriesId: undefined });
+    case 'semis': {
+      // Keep the host's arrangement as the draft, so going back to fix a group result doesn't undo it.
+      const semifinalDraft = tournament.series.filter((series) => series.stage === 'semi').map((series) => series.playerIds);
+      return ok({ ...tournament, stage: 'groups', series: removeStage('semi'), currentSeriesId: undefined, semifinalDraft });
+    }
     case 'final':
       return ok({ ...tournament, stage: 'semis', series: removeStage('final'), currentSeriesId: undefined });
     case 'done':
@@ -345,7 +367,7 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       }
       if (duplicates.size > 0) return fail((t) => t.errors.duplicateNames([...duplicates].join(', ')));
       const players = names.map((name, index) => ({ id: `p${index + 1}`, name }));
-      return ok({ ...withoutPicks(tournament), players, series: [], currentSeriesId: undefined, tieDraws: [] });
+      return ok({ ...withoutSemifinalPlan(tournament), players, series: [], currentSeriesId: undefined, tieDraws: [] });
     }
 
     case 'renamePlayer': {
@@ -366,7 +388,7 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
         tournament.players.map((player) => player.id),
         context.random
       );
-      return ok({ ...withoutPicks(tournament), series: groups, currentSeriesId: undefined, tieDraws: [] });
+      return ok({ ...withoutSemifinalPlan(tournament), series: groups, currentSeriesId: undefined, tieDraws: [] });
     }
 
     case 'startGroupStage': {
@@ -445,6 +467,13 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
 
     case 'setSemifinalPicks':
       return setSemifinalPicks(tournament, action.fillIns, action.dropped);
+
+    case 'arrangeSemifinals':
+      return arrangeSemifinals(tournament, action.firstId, action.secondId);
+
+    case 'resetSemifinalDraft':
+      if (!tournament.semifinalDraft) return fail((t) => t.errors.noDraft);
+      return ok(withoutDraft(tournament));
 
     case 'recordPoll':
       return recordPoll(tournament, action.seriesId, action.votes, action.ballots, context.now);

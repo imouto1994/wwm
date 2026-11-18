@@ -182,6 +182,19 @@ function parseSemifinalPicks(value: unknown, knownPlayers: ReadonlySet<PlayerId>
   return { fillIns: ids(value.fillIns, 'fillIns'), dropped: ids(value.dropped, 'dropped') };
 }
 
+function parseSemifinalDraft(value: unknown, knownPlayers: ReadonlySet<PlayerId>): [PlayerId, PlayerId, PlayerId][] {
+  check(
+    Array.isArray(value) && value.length === 3 && value.every((group) => Array.isArray(group) && group.length === 3),
+    'semifinalDraft must be three groups of three.'
+  );
+  const ids = (value as unknown[][]).flat();
+  check(
+    ids.every((playerId) => isString(playerId) && knownPlayers.has(playerId)) && new Set(ids).size === 9,
+    'semifinalDraft must list nine different known players.'
+  );
+  return (value as PlayerId[][]).map((group) => [group[0], group[1], group[2]]);
+}
+
 export function parseTournament(input: unknown): Result<Tournament> {
   try {
     check(isObject(input), 'The tournament must be an object.');
@@ -206,6 +219,7 @@ export function parseTournament(input: unknown): Result<Tournament> {
     check(Array.isArray(input.tieDraws), 'tieDraws must be a list.');
     const tieDraws = input.tieDraws.map((draw, index) => parseTieDraw(draw, `tieDraws[${index}]`, knownPlayers));
     const semifinalPicks = input.semifinalPicks === undefined ? undefined : parseSemifinalPicks(input.semifinalPicks, knownPlayers);
+    const semifinalDraft = input.semifinalDraft === undefined ? undefined : parseSemifinalDraft(input.semifinalDraft, knownPlayers);
 
     return {
       ok: true,
@@ -221,6 +235,7 @@ export function parseTournament(input: unknown): Result<Tournament> {
         lateRule: input.lateRule,
         tieDraws,
         ...(semifinalPicks ? { semifinalPicks } : {}),
+        ...(semifinalDraft ? { semifinalDraft } : {}),
       },
     };
   } catch (error) {

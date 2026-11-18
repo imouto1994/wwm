@@ -11,9 +11,10 @@ import { useNow } from '@/hooks/useNow';
 import { useTournamentFeed } from '@/hooks/useTournamentFeed';
 import { formatAgo } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
+import { semifinalGroups, semifinalSeriesFrom } from '@/lib/qualification';
 import { championOf } from '@/lib/reducer';
 import { isSeriesComplete } from '@/lib/series';
-import type { SeriesStage, Tournament } from '@/types/tournament';
+import type { Series, SeriesStage, Tournament } from '@/types/tournament';
 import { Swords } from 'lucide-react';
 
 // Later stages first: once the knockouts start, they are what viewers came for.
@@ -23,22 +24,33 @@ const STAGE_SECTIONS: { stage: SeriesStage; title: 'final' | 'semis' | 'groups' 
   { stage: 'group', title: 'groups' },
 ];
 
+/**
+ * The series to show for a stage. Before the semifinals start, their groups
+ * are already known (seeded, or as the host arranged them), so viewers see
+ * them as a draft, the same way they see the group draw during setup.
+ */
+function sectionSeries(tournament: Tournament, stage: SeriesStage): { series: Series[]; isDraft: boolean } {
+  const series = tournament.series.filter((entry) => entry.stage === stage);
+  if (stage === 'semi' && series.length === 0 && tournament.stage === 'groups') {
+    const groups = semifinalGroups(tournament);
+    if (groups) return { series: semifinalSeriesFrom(groups, tournament.lateRule), isDraft: true };
+  }
+  return { series, isDraft: stage === 'group' && tournament.stage === 'setup' };
+}
+
 function Bracket({ tournament }: { tournament: Tournament }) {
   const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   return (
     <>
       {STAGE_SECTIONS.map(({ stage, title }) => {
-        const series = tournament.series.filter((entry) => entry.stage === stage);
+        const { series, isDraft } = sectionSeries(tournament, stage);
         if (series.length === 0) return null;
         const finished = series.filter(isSeriesComplete).length;
-        const isDrawPreview = stage === 'group' && tournament.stage === 'setup';
+        const draftTitle = stage === 'group' ? t.viewer.groupDraw : t.stages[title];
+        const draftAside = stage === 'group' ? t.viewer.notStartedYet : t.viewer.semisDraft;
         return (
-          <Section
-            key={stage}
-            title={isDrawPreview ? t.viewer.groupDraw : t.stages[title]}
-            aside={isDrawPreview ? t.viewer.notStartedYet : t.viewer.finishedOf(finished, series.length)}
-          >
+          <Section key={stage} title={isDraft ? draftTitle : t.stages[title]} aside={isDraft ? draftAside : t.viewer.finishedOf(finished, series.length)}>
             <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
               {series.map((entry) => (
                 <SeriesCard key={entry.id} series={entry} nameOf={nameOf} live={entry.id === tournament.currentSeriesId && !isSeriesComplete(entry)} />

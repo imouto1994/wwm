@@ -12,6 +12,8 @@ interface RearrangePanelProps {
   tournament: Tournament;
   /** The series whose players can be swapped: the group draw, or the semifinals. */
   series: Series[];
+  /** Performs the swap; defaults to swapping between real series. The stage gate passes its own to rearrange the semifinal draft. */
+  onSwap?: (firstId: PlayerId, secondId: PlayerId) => boolean;
 }
 
 const isLocked = (series: Series) => series.games.length > 0 || Boolean(series.winnerOverride);
@@ -29,7 +31,7 @@ function rematchesIn(series: Series, firstRoundGroupOf: Map<PlayerId, Series>): 
  * places. Series that have a result are locked. Swapping the same two players
  * again undoes it.
  */
-export function RearrangePanel({ host, tournament, series }: RearrangePanelProps) {
+export function RearrangePanel({ host, tournament, series, onSwap }: RearrangePanelProps) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<PlayerId>();
   const [note, setNote] = useState<Translatable>();
@@ -47,7 +49,8 @@ export function RearrangePanel({ host, tournament, series }: RearrangePanelProps
     const cleared = [selectedSeries, seriesOf(playerId)].filter((entry): entry is Series => Boolean(entry?.poll || entry?.gamesPoll));
     const first = nameOf(selected);
     const second = nameOf(playerId);
-    if (host.dispatch({ type: 'swapPlayers', firstId: selected, secondId: playerId })) {
+    const swapped = onSwap ? onSwap(selected, playerId) : host.dispatch({ type: 'swapPlayers', firstId: selected, secondId: playerId });
+    if (swapped) {
       const message: Translatable = (messages) =>
         messages.rearrange.swapped(first, second) +
         (cleared.length > 0 ? messages.rearrange.pollsCleared(cleared.map((entry) => messages.seriesName(entry)).join(', ')) : '');

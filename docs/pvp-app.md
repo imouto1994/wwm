@@ -72,11 +72,11 @@ The 9 semifinalists are ranked by group-stage record (wins, points per game, rec
 | 2         | 2, 5, 8 |
 | 3         | 1, 6, 7 |
 
-If two players from the same first-round group would meet again, the app swaps players **within the same seed tier** (seeds 1–3, 4–6, 7–9), using the fewest moves that remove every rematch. The result is a starting point: the host can still rearrange the semifinals before they start (§2.4).
+If two players from the same first-round group would meet again, the app swaps players **within the same seed tier** (seeds 1–3, 4–6, 7–9), using the fewest moves that remove every rematch. The result is a starting point. As soon as the seeded groups exist (group stage decided, picks made, ties drawn), **viewers see them as a draft** ("not started yet · the host may still adjust"). The host can rearrange them at the end of the group stage before pressing "Start the semifinals", and every swap shows up for viewers right away. The semifinals then start exactly as arranged.
 
 ### 2.4 Rearranging players, and when things go wrong
 
-- **Rearrange groups**: the host can swap any two players between groups that haven't started (no game, no ruling), both during setup and the group stage (the group draw) and in the semifinals. Tap a player, then a player in another group. A swap clears both groups' recorded Discord predictions, since the polls were made for the old line-up. In the semifinals, the screen flags any rematch from the group stage; it's a warning, not a block.
+- **Rearrange groups**: the host can swap any two players between groups that haven't started (no game, no ruling): in the group draw (setup and group stage), in the draft semifinal groups before starting them (§2.3), and in the semifinals once started, until each has a result. Tap a player, then a player in another group. A swap clears both groups' recorded Discord predictions, since the polls were made for the old line-up. In the semifinals, the screen flags any rematch from the group stage; it's a warning, not a block.
 - **Wrong result**: "Undo last game" in the current series. Results in earlier stages need "Go back a stage", which removes the current stage's series.
 - **Forfeit, no-show or disconnect ruling**: "Override a series winner" with a short reason that viewers see. The override decides the series no matter what the games say.
 - **A semifinalist or finalist has to leave before their series starts**: "Replace a player". Candidates are suggested best first: for the semifinals, the best group-stage records among non-semifinalists; for the final, the other two players from that finalist's semifinal. Once a series has a game, use an override instead.
@@ -116,12 +116,12 @@ PvP Tournament Tracker
 │   ├── Header: stage, live/offline status, champion banner when finished
 │   ├── Now playing: current series, games so far, ETA; "on deck" next series
 │   ├── Road to the semifinals (group stage only): the rule, group winners, the host's picks
-│   ├── Bracket, newest stage first: grand final, semifinals, group stage (group draw preview during setup)
+│   ├── Bracket, newest stage first: grand final, semifinals, group stage (group draw preview during setup, draft semifinal groups once known)
 │   ├── Discord predictions: crowd record on both questions + member leaderboard
 │   └── Recent results: last games, newest first
 └── /host        Host page (PIN gate, one scorekeeper device)
     ├── Setup: event name, participant list, group draw (redraw allowed, tap-to-swap players), start group stage
-    ├── Run: stage gate (semifinal picks, ties, semifinal preview, late rule, advance) → game entry + poll panel → series list → "Rearrange players" (collapsed)
+    ├── Run: stage gate (semifinal picks, ties, semifinal groups to arrange, late rule, advance) → game entry + poll panel → series list → "Rearrange players" (collapsed)
     ├── Finished: champion and final result
     └── Host tools (collapsed): override, replace, rename, go back a stage, restore a save, export JSON, reset
 ```
@@ -147,6 +147,7 @@ interface Tournament {
   lateRule: boolean; // semifinals are single matches
   tieDraws: TieDraw[]; // recorded random draws: { key, order, drawnAt }
   semifinalPicks?: { fillIns: PlayerId[]; dropped: PlayerId[] }; // host picks at 21/24 (fillIns) and 30 (dropped)
+  semifinalDraft?: [PlayerId, PlayerId, PlayerId][]; // host's arrangement of the semifinal groups before they start; absent = seeded
 }
 
 interface Series {
@@ -203,7 +204,8 @@ All changes go through `applyAction(tournament, action, { now, random }) → Res
 | `overrideWinner`, `clearOverride`             | Series in the current stage; reason required                    |
 | `replacePlayer`                               | Semifinal or final series with no games or override yet         |
 | `swapPlayers`                                 | Setup, group stage or semifinals; two players in different series, neither of which has a game or override (clears both series' polls) |
-| `setSemifinalPicks`                           | Group stage, every group decided; fill-ins must be non-winners, dropped players must be winners, at most the number of spots (partial picks allowed) |
+| `setSemifinalPicks`                           | Group stage, every group decided; fill-ins must be non-winners, dropped players must be winners, at most the number of spots (partial picks allowed). Clears any semifinal arrangement |
+| `arrangeSemifinals`, `resetSemifinalDraft`    | Group stage, once the semifinal groups exist (picks made, ties drawn): swap two players between draft groups, or go back to the seeded groups |
 | `recordPoll`, `clearPoll`                     | Any series                                                      |
 | `setGamesLine`, `recordGamesPoll`, `clearGamesPoll` | First-to-2 series; the line is a multiple of 0.5 from 0.5 to 10; a new line clears votes recorded for another line |
 | `resolveTies`                                 | There are pending ties (repeats while new ties surface)         |
@@ -212,7 +214,7 @@ All changes go through `applyAction(tournament, action, { now, random }) → Res
 | `reopenStage`                                 | After setup; groups → setup only while no group has results     |
 | `reset`                                       | Any time (earlier saves stay restorable)                        |
 
-`advance` creates the next stage's series: the seeded semifinals (`S1`–`S3`, first to 2 or one match under the late rule), then the grand final (`F`, first to 2), then `done`. Going back from the semifinals keeps the host's picks. A new participant list or a redraw clears them.
+`advance` creates the next stage's series: the semifinals (`S1`–`S3`) exactly as arranged (or seeded), first to 2 or one match under the late rule; then the grand final (`F`, first to 2); then `done`. A draft that no longer holds exactly the current semifinalists (say, after new picks) is ignored and the seeded groups are used. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draft, so nothing has to be redone. A new participant list or a redraw clears both.
 
 The host page uses `crypto.getRandomValues` for draws, so no one can claim the draw was rigged.
 
@@ -235,7 +237,7 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 - **Rearrange players** (group stage and semifinals, collapsed under the series list): the same tap-to-swap for groups that haven't started; started groups are shown locked. In the semifinals each name shows its first-round group, and rematches are flagged.
 - **Game entry**: tap the winner, then the runner-up; third place fills itself in. Save, Undo last game, and "Show as live" to mark a series as playing before its first result. Picks clear as soon as a game is saved, so a double tap can't save it twice.
 - **Poll panel**: two sections, "who wins?" and (first-to-2 series) "over/under games" with the line picker. Each has copy-ready question and answers, a votes JSON import with preview, typed counts, and a clear button.
-- **Stage gate** (once every series in the stage is decided): who's through; at 21, 24 or 30 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); pending seeding ties and the draw button, recent draws, semifinal preview, late-running rule checkbox, and the advance button ("Seed and start the semifinals", "Start the grand final", "Finish the tournament").
+- **Stage gate** (once every series in the stage is decided): who's through; at 21, 24 or 30 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); pending seeding ties and the draw button, recent draws, the semifinal groups as viewers see them with tap-to-swap (and "Back to the seeded groups" after any swap), late-running rule checkbox, and the advance button ("Start the semifinals", "Start the grand final", "Finish the tournament").
 - **Save indicator**: "Saving…", "All changes saved", or "Not saved" with a retry button.
 - **Host tools**: see §2.4, plus "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
 
@@ -352,7 +354,7 @@ The full step-by-step runbook, with verification, a rehearsal, event-day operati
 1. Before the event: open `/host`, enter the PIN, set the event name and paste the final participant list.
 2. Draw the groups (redraw if needed, or swap individual players) and share the viewer link in Discord. The draw shows on the viewer page right away.
 3. For each series: "Show as live", set the over/under line, post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel.
-4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots, at 30 pick the winner to leave out. Then break any seeding ties with the draw button, check the semifinal preview, decide on the late-running rule, and advance. Rearrange the semifinals if needed before the first one starts.
+4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots, at 30 pick the winner to leave out. Then break any seeding ties with the draw button. The semifinal groups now appear for viewers: rearrange them if needed, decide on the late-running rule, and start the semifinals. Then post the semifinal polls from each series' poll panel.
 5. Download the JSON backup after each stage.
 
 ---

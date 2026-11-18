@@ -118,6 +118,12 @@ export interface Tournament {
   tieDraws: TieDraw[];
   /** Set during the group stage at 21, 24 and 30 players; see SemifinalPicks. */
   semifinalPicks?: SemifinalPicks;
+  /**
+   * The host's arrangement of the semifinal groups before they start. Absent
+   * means the seeded groups; ignored if it no longer holds exactly the
+   * current semifinalists (see semifinalGroups).
+   */
+  semifinalDraft?: [PlayerId, PlayerId, PlayerId][];
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };

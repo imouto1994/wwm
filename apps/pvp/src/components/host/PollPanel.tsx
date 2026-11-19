@@ -25,9 +25,18 @@ function Prompt({ question, answers }: { question: string; answers: string[] }) 
         <span className='text-muted'>{t.poll.question}</span> <span className='text-fg'>{question}</span>
         <CopyButton text={question} />
       </div>
-      <div className='flex flex-wrap items-center gap-2'>
-        <span className='text-muted'>{t.poll.answers}</span> <span className='text-fg'>{answers.join(' · ')}</span>
-        <CopyButton text={answers.join('\n')} />
+      <div className='flex flex-col gap-1.5'>
+        <span className='text-muted'>{t.poll.answers}</span>
+        {/* EasyPoll takes each answer in its own field, so each one copies on its own. */}
+        <ol className='flex flex-col gap-1.5'>
+          {answers.map((answer, index) => (
+            <li key={answer} className='flex items-center gap-2'>
+              <span className='w-4 shrink-0 text-right text-xs text-muted'>{index + 1}.</span>
+              <span className='min-w-0 flex-1 truncate text-fg'>{answer}</span>
+              <CopyButton text={answer} />
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

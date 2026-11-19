@@ -254,6 +254,40 @@ export interface LeaderboardEntry {
   picks: number;
 }
 
+export interface LeaderboardPlace {
+  /** Prize place, for the top members only. */
+  place?: 1 | 2 | 3;
+  /** Members above this one, plus one; shared within a tie. */
+  rank: number;
+}
+
+/**
+ * Prize places for a sorted leaderboard. Members level on correct picks and
+ * picks share a place. Places go to whole tie groups in order and stop once
+ * three members hold one, so ties never add winners: two members sharing 1st
+ * leave room only for a 2nd, and four sharing 1st leave no other place.
+ */
+export function leaderboardPlaces(entries: readonly LeaderboardEntry[]): LeaderboardPlace[] {
+  let place = 0;
+  let placed = 0;
+  let groupRank = 1;
+  let groupPlace: LeaderboardPlace['place'];
+  return entries.map((entry, index) => {
+    const previous = entries[index - 1];
+    if (!previous || previous.correct !== entry.correct || previous.picks !== entry.picks) {
+      groupRank = index + 1;
+      if (placed < 3) {
+        place += 1;
+        groupPlace = place as 1 | 2 | 3;
+      } else {
+        groupPlace = undefined;
+      }
+    }
+    if (groupPlace) placed += 1;
+    return { ...(groupPlace ? { place: groupPlace } : {}), rank: groupRank };
+  });
+}
+
 /** Discord members ranked by correct picks across both predictions, over finished series. */
 export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[] {
   const entries = new Map<string, LeaderboardEntry>();

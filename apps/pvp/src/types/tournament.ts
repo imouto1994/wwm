@@ -125,9 +125,9 @@ export interface Tournament {
   /** Set at the end of the group stage at 21 and 24 players; see SemifinalPicks. */
   semifinalPicks?: SemifinalPicks;
   /**
-   * The host's arrangement of the semifinal groups before they start. Absent
-   * means the seeded groups; ignored if it no longer holds exactly the
-   * current semifinalists (see semifinalGroups).
+   * The semifinal groups the host drew at random, with any swaps, before they
+   * start. Absent until the draw; ignored if it no longer holds exactly the
+   * current semifinalists (see semifinalGroups). Viewers don't see it.
    */
   semifinalDraft?: [PlayerId, PlayerId, PlayerId][];
 }

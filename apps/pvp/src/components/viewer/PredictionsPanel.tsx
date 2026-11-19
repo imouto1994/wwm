@@ -1,6 +1,6 @@
 import { Seal } from '@/components/viewer/Seal';
 import { useI18n } from '@/hooks/useI18n';
-import { type LeaderboardEntry, crowdGamesRecord, crowdRecord, predictionLeaderboard } from '@/lib/polls';
+import { type LeaderboardPlace, crowdGamesRecord, crowdRecord, leaderboardPlaces, predictionLeaderboard } from '@/lib/polls';
 import type { Tournament } from '@/types/tournament';
 import { ChevronUp, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -11,14 +11,6 @@ const RANK_SEALS = [
   { text: '榜眼', tone: 'ink' },
   { text: '探花', tone: 'ochre' },
 ] as const;
-
-/** Rank 1, 2, … with ties sharing a rank: same correct picks out of the same number of picks. */
-function ranksOf(entries: readonly LeaderboardEntry[]): number[] {
-  return entries.map((entry, index) => {
-    const first = entries.findIndex((other) => other.correct === entry.correct && other.picks === entry.picks);
-    return (first < 0 ? index : first) + 1;
-  });
-}
 
 /**
  * Slides rows to their new place when the ranking changes and flashes a row
@@ -54,12 +46,13 @@ function useRankMotion() {
   };
 }
 
-function RankMark({ rank }: { rank: number }) {
+/** A seal for the prize places (shared by ties), a plain number for everyone else. */
+function RankMark({ place, rank }: LeaderboardPlace) {
   const { t } = useI18n();
-  const seal = RANK_SEALS[rank - 1];
-  if (seal) {
+  if (place) {
+    const seal = RANK_SEALS[place - 1];
     return (
-      <span title={t.predictions.rankTitles[rank - 1]} className='flex w-8 shrink-0 justify-center'>
+      <span title={t.predictions.rankTitles[place - 1]} className='flex w-8 shrink-0 justify-center'>
         <Seal text={seal.text} size='md' tone={seal.tone} />
       </span>
     );
@@ -88,7 +81,7 @@ export function PredictionsBoard({ tournament, onClose, className = '' }: Predic
   const { t } = useI18n();
   const rowRef = useRankMotion();
   const leaderboard = tournament ? predictionLeaderboard(tournament) : [];
-  const ranks = ranksOf(leaderboard);
+  const places = leaderboardPlaces(leaderboard);
   const winnerRecord = tournament ? crowdRecord(tournament) : { called: 0, decided: 0 };
   const gamesRecord = tournament ? crowdGamesRecord(tournament) : { called: 0, decided: 0 };
   const showGames = leaderboard.some((entry) => entry.gamesPicks > 0);
@@ -140,11 +133,11 @@ export function PredictionsBoard({ tournament, onClose, className = '' }: Predic
                 key={entry.username}
                 ref={rowRef(entry.username)}
                 data-correct={entry.correct}
-                className={`flex items-center gap-3 rounded-lg px-2 py-2 ${ranks[index] === 1 ? 'bg-gold/10' : ''}`}
+                className={`flex items-center gap-3 rounded-lg px-2 py-2 ${places[index].place === 1 ? 'bg-gold/10' : ''}`}
               >
-                <RankMark rank={ranks[index]} />
+                <RankMark {...places[index]} />
                 <div className='min-w-0 flex-1'>
-                  <p className={`truncate ${ranks[index] <= 3 ? 'font-bold text-fg' : 'font-semibold text-fg'}`}>{entry.name}</p>
+                  <p className={`truncate ${places[index].place ? 'font-bold text-fg' : 'font-semibold text-fg'}`}>{entry.name}</p>
                   <p className='text-xs text-muted'>
                     {t.predictions.winner} {entry.winnerCorrect}/{entry.winnerPicks}
                     {showGames && entry.gamesPicks > 0 && (

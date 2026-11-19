@@ -13,7 +13,7 @@ import { useHostTournament } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import type { Translatable } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
-import { championOf } from '@/lib/reducer';
+import { finalStandings } from '@/lib/reducer';
 import { ExternalLink, Swords } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -43,7 +43,7 @@ function HostConsole({ pin, onLocked, onSignOut }: HostConsoleProps) {
     );
   }
 
-  const champion = championOf(tournament);
+  const standings = finalStandings(tournament);
   const nameOf = nameLookup(tournament);
   const final = tournament.series.find((series) => series.stage === 'final');
 
@@ -79,7 +79,7 @@ function HostConsole({ pin, onLocked, onSignOut }: HostConsoleProps) {
       {tournament.stage === 'setup' && <SetupPanel host={host} tournament={tournament} />}
       {tournament.stage === 'done' && (
         <div className='flex flex-col gap-4'>
-          {champion && <ChampionBanner name={nameOf(champion)} />}
+          {standings && <ChampionBanner standings={standings} nameOf={nameOf} />}
           {final && <SeriesCard series={final} nameOf={nameOf} />}
           <p className='text-sm text-muted'>{t.console.finishedNote}</p>
         </div>

@@ -8,7 +8,7 @@
 
 ### 1.1 Vision
 
-A small web app for the guild's **1v1v1 PvP tournament**. One host records each game's finishing order on a single device; everyone else follows the bracket live on a public page. It shows who is playing now, who is through, the semifinal seeding, Discord predictions and the champion. The app runs on one arena with no parallel matches, so it only ever needs to track one "now playing" series.
+A small web app for the guild's **1v1v1 PvP tournament**. One host records each game's finishing order on a single device; everyone else follows the bracket live on a public page. It shows who is playing now, who is through, the semifinal groups, Discord predictions and the final's podium. The app runs on one arena with no parallel matches, so it only ever needs to track one "now playing" series.
 
 This is the fourth app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md), the [Reforge Pity Tracker](reforge-app.md) and the [Speedrun Loadout Randomizer](speedrun-app.md). Unlike the others it has a small backend: one Vercel Function and one Upstash Redis database holding a single JSON document.
 
@@ -18,7 +18,7 @@ This is the fourth app in the `wwm` monorepo, alongside the [Boss Guide](SPEC.md
 | --- | -------------------------------------------------- | --------------------------------------------------------------------- |
 | 1   | Recording a game is fast enough between fights     | Two taps plus Save per game; third place fills itself in              |
 | 2   | Members always see the current state               | Viewer page reflects a save within seconds (usually under 10), without reloading |
-| 3   | The rules are applied the same way every time      | Qualifiers, ties and seeding are computed, never typed in by hand     |
+| 3   | The rules are applied the same way every time      | Qualifiers, ties and places are computed, never typed in by hand      |
 | 4   | Mistakes and surprises are recoverable on the night | Undo, winner overrides, replacements, stage reopen, restore from history |
 | 5   | Free to run                                        | Fits Vercel Hobby + Upstash free tier                                 |
 
@@ -58,8 +58,8 @@ The survival game is its own short stage between the group stage and the semifin
 
 Then:
 
-- **Semifinals**: 3 groups of 3, first to 2. Seeded by group-stage record (§2.3), then adjustable by the host (§2.4).
-- **Grand final**: the 3 semifinal winners, **first to 3**.
+- **Semifinals**: 3 groups of 3, first to 2. Drawn at random by the host (§2.3), then adjustable by the host (§2.4).
+- **Grand final**: the 3 semifinal winners, **first to 3**. All three places win prizes: the series winner is the **champion**, and the other two are ranked by the points they scored in the final (1st = 3, 2nd = 1, 3rd = 0 per game). Level on points, **both are runners-up** (2nd), and there's no 3rd.
 - Semifinals are always first to 2. An earlier "late-running rule" that could cut them to one game each was removed by the owner's choice.
 
 ### 2.2 Ranking and ties
@@ -70,23 +70,23 @@ Records from each series (a player's group-stage record is their group series):
 2. **Points per game**: 1st = 3, 2nd = 1, 3rd = 0, divided by games played. Per game rather than total, so a 2-0 group and a 2-1 group compare fairly.
 3. **Random draw**, run by the host from the app and recorded.
 
-KOs are not tracked. Two kinds of ties need a draw: the **last survival seat** at 30 players (§2.1), once every group is decided, and the **semifinal seeding**, once the host's picks or the survival game are done. **Advancing is blocked until the host clicks "Draw to break the ties"**. Each draw is stored with the tie's context and players, so every screen shows the same order afterwards.
+KOs are not tracked. Only one kind of tie needs a draw: the **last survival seat** at 30 players (§2.1), once every group is decided. The semifinal groups are drawn at random as a whole (§2.3), so nothing else is ranked. **Advancing is blocked until the host clicks "Draw to break the ties"**. Each draw is stored with the tie's context and players, so every screen shows the same order afterwards.
 
-### 2.3 Semifinal seeding
+### 2.3 Semifinal groups
 
-The 9 semifinalists are ranked by group-stage record (wins, points per game, recorded draw), so group winners normally seed above the host's fill-ins. They go into a snake:
+The semifinal groups are **drawn at random**, with no seeding by record. Once the 9 semifinalists are settled (group stage decided, the host's picks made, or the survival game played), the host presses **"Draw the semifinal groups"**:
 
-| Semifinal | Seeds   |
-| --------- | ------- |
-| 1         | 3, 4, 9 |
-| 2         | 2, 5, 8 |
-| 3         | 1, 6, 7 |
+1. The app shuffles the 9 players into 3 groups of 3. Players who met in the same first-round group (a group winner and a fill-in from that group) are kept apart by redrawing, so every rematch-free split is equally likely.
+2. The host can swap players between the drawn groups (§2.4); the screen flags any rematch a swap creates, as a warning. **"Redraw"** throws away the groups and any swaps and draws again.
+3. **The groups are private until the host presses "Start the semifinals".** Viewers see nothing of the semifinal line-ups before then, so they never watch a draft change. The semifinals start exactly as drawn and arranged.
 
-If two players from the same first-round group would meet again, the app swaps players **within the same seed tier** (seeds 1–3, 4–6, 7–9), using the fewest moves that remove every rematch. The result is a starting point. As soon as the seeded groups exist (group stage decided, picks made, ties drawn), **viewers see them as a draft** ("not started yet · the host may still adjust"). The host can rearrange them at the end of the group stage before pressing "Start the semifinals", and every swap shows up for viewers right away. The semifinals then start exactly as arranged.
+The draw is stored with the tournament, so a reload or a second host tab shows the same groups. If new picks or a changed result alter who's through, the draw no longer fits and the host draws again.
+
+Older documents may still hold tie draws with the `seeding` context from when the semifinals were seeded by record. They're kept and still show under recent draws, but nothing uses them.
 
 ### 2.4 Rearranging players, and when things go wrong
 
-- **Rearrange groups**: the host can swap any two players between groups that haven't started (no game, no ruling): in the group draw (setup and group stage), in the draft semifinal groups before starting them (§2.3), and in the semifinals once started, until each has a result. Tap a player, then a player in another group. A swap clears both groups' recorded Discord predictions, since the polls were made for the old line-up. In the semifinals, the screen flags any rematch from the group stage; it's a warning, not a block.
+- **Rearrange groups**: the host can swap any two players between groups that haven't started (no game, no ruling): in the group draw (setup and group stage), in the drawn semifinal groups before starting them (§2.3, private to the host), and in the semifinals once started, until each has a result. Tap a player, then a player in another group. A swap clears both groups' recorded Discord predictions, since the polls were made for the old line-up. In the semifinals, the screen flags any rematch from the group stage; it's a warning, not a block.
 - **Wrong result**: "Undo last game" in the current series. Results in earlier stages need "Go back a stage", which removes the current stage's series.
 - **Forfeit, no-show or disconnect ruling**: "Override a series winner" with a short reason that viewers see. The override decides the series no matter what the games say.
 - **A player can't play, before their series starts**: "Replace a player" (Host tools). The series' recorded predictions are cleared, since they were for the old line-up.
@@ -102,8 +102,10 @@ Predictions run in **EasyPoll on Discord**, not in the app. Each series can have
 | Poll | Question (copied from the app) | Answers | Who's right |
 | --- | --- | --- | --- |
 | Winner | "Bảng 3: ai sẽ thắng?" / "Group 3: who wins?" | The three players | The series winner (a ruling counts) |
-| Who goes out (survival game only, instead of the winner poll) | "Trận sinh tử: ai về Ba và bị loại?" / "Survival game: who finishes 3rd and goes out?" | The three players | The player who finishes 3rd; counts in the leaderboard's winner column |
-| Over/under games | "Bảng 3: trên hay dưới 2,5 ván?" / "Group 3: over or under 2.5 games?" | "Trên 2,5 ván" / "Dưới 2,5 ván" (or "Over/Under 2.5 games") | More or fewer games than the line |
+| Who goes out (survival game only, instead of the winner poll) | "Trận sinh tử: ai sẽ về Ba và dừng bước?" / "Survival game: who finishes 3rd and goes out?" | The three players | The player who finishes 3rd; counts in the leaderboard's winner column |
+| Over/under games | "Bảng 3: kèo 2,5 ván, Trên hay Dưới?" / "Group 3: over or under 2.5 games?" | "Trên 2,5 ván" / "Dưới 2,5 ván" (or "Over/Under 2.5 games") | More or fewer games than the line |
+
+Each answer has its own copy button, since EasyPoll takes every answer in a separate field.
 
 - **The line is fixed per phase** (`GAMES_LINES` in `format.ts`), shown on every series card that hasn't finished yet:
 
@@ -127,6 +129,17 @@ For each poll the host copies the question and answers from the app, posts a non
 2. Paste or upload the JSON in the matching section of the host page's poll panel. Winner answers are the players' display names, so each vote is read back to that player's username through the display names (emoji prefixes and case are ignored; a name of someone outside the series doesn't match). Voters are matched by username, ignoring case and a leading "@"; an older export that still carries `discordId` imports fine, the ID is ignored. Over/under votes are read from the first word of the answer in either language, accents ignored: "Trên"/"Over"/"Tài" is over, "Dưới"/"Under"/"Xỉu" is under. The app previews unmatched and duplicate votes, then saves the ballots.
 
 **The votes JSON is the only way to record a poll.** There's no typed-counts fallback, so every recorded vote names its voter and the predictor leaderboard stays complete throughout the event. Vote counts and shares are derived from the ballots. Predictions **never** affect the bracket. The viewer shows vote shares and the over/under line and result on each series card, how often the crowd was right on each question, and a leaderboard of members by correct predictions (winner, over/under and total) that updates as each series finishes.
+
+**Leaderboard prize places.** Members are ranked by correct picks, then fewer picks (better accuracy), then name. Members level on both correct picks and picks share a place. Places 1st to 3rd go to whole tie groups in order and **stop as soon as three members hold one**, so ties never add winners:
+
+| Scores (correct/picks)       | Places                                 |
+| ---------------------------- | -------------------------------------- |
+| 9/9, 9/9, 8/9, 7/9           | 1st, 1st, 2nd, then #4 (no 3rd)        |
+| 9/9, 8/9, 8/9, 8/9, 7/9      | 1st, 2nd, 2nd, 2nd, then #5 (no 3rd)   |
+| 9/9, 9/9, 9/9, 9/9, 8/9      | 1st ×4, then #5 (no 2nd or 3rd)        |
+| 9/9, 8/9, 7/9, 7/9           | 1st, 2nd, 3rd, 3rd (a tie for the last place can't be split) |
+
+Everyone outside the places shows their position: the number of members above them, plus one.
 
 ### 2.6 Discord usernames and display names
 
@@ -152,16 +165,16 @@ Everyone is identified by **Discord username** (the unique `@handle`, which is w
 ```
 PvP Tournament Tracker
 ├── /            Viewer page (public, read-only, polls every 4 s)
-│   ├── Header: stage, live/offline status, champion banner when finished
+│   ├── Header: stage, live/offline status, champion banner with the runner(s)-up and 3rd place once the final is decided
 │   ├── Now playing: current series, games so far, ETA; "on deck" next series
 │   ├── Road to the semifinals (group stage, and the survival game at 30 players): the rule, group winners, the host's picks or the survival seats
-│   ├── Bracket, newest stage first: grand final, semifinals, survival game (30 players), group stage (drafts shown as soon as line-ups are known)
+│   ├── Bracket, newest stage first: grand final, semifinals, survival game (30 players), group stage (the group draw and survival seats shown as drafts once known; semifinal groups only once started)
 │   ├── Bảng Thần Toán (prediction leaderboard): sticky side column on wide screens, bottom dock + sheet on phones
 │   └── Recent results: last games, newest first
 └── /host        Host page (PIN gate, one scorekeeper device)
     ├── Setup: event name, display names (JSON), participants by Discord username, group draw (redraw allowed, tap-to-swap players), start group stage
-    ├── Run: stage gate (semifinal picks or survival seats, ties, semifinal groups to arrange, advance) → game entry + poll panel → series list → "Rearrange players" (collapsed)
-    ├── Finished: champion and final result
+    ├── Run: stage gate (semifinal picks or survival seats, ties, semifinal draw and swaps, advance) → game entry + poll panel → series list → "Rearrange players" (collapsed)
+    ├── Finished: champion banner with 2nd and 3rd, and the final's card
     └── Host tools (collapsed): override, replace, display names, go back a stage, restore a save, export JSON, reset
 ```
 
@@ -186,7 +199,7 @@ interface Tournament {
   currentSeriesId?: string; // the "now playing" series
   tieDraws: TieDraw[]; // recorded random draws: { key, order, drawnAt }
   semifinalPicks?: { fillIns: PlayerId[] }; // host picks for the empty spots at 21/24
-  semifinalDraft?: [PlayerId, PlayerId, PlayerId][]; // host's arrangement of the semifinal groups before they start; absent = seeded
+  semifinalDraft?: [PlayerId, PlayerId, PlayerId][]; // the host's random semifinal draw, with any swaps, before they start; private to the host
 }
 
 interface Series {
@@ -208,7 +221,8 @@ Notes:
 - **Ballots and display names are public**: the viewer API returns the whole document, including voters' Discord usernames and the whole display-name list (even people who never vote), because the screens and the leaderboard need them. Numeric Discord IDs are never stored.
 - Version 1 documents stored `{ id: 'p1', name }` players and ballots with a Discord ID and username. `parseTournament` converts them on load: player ids stay as they were and their names become display names; each ballot keeps its lowercased username (or the Discord ID when the username was empty), so older data keeps working. Username format and unique names are checked only on new input (`setDisplayNames`, `setPlayers`).
 - A poll holds at least one ballot and one ballot per Discord member. Polls saved by older versions with only vote counts are dropped on load, since they can't rank anyone; re-import their JSON.
-- A tie draw's `key` is its context plus the sorted tied ids, for example `seeding:lan.wwm,minh_99`. The only context in use is `seeding`.
+- A tie draw's `key` is its context plus the sorted tied ids, for example `survival:lan.wwm,minh_99`. The only context in use is `survival`; older documents may also hold `seeding` draws (§2.3).
+- `semifinalDraft` is part of the public document, but the viewer page doesn't show it; the line-ups become public when the semifinals start.
 - `semifinalPicks` is checked for shape only (known players, no repeats). Whether a pick still fits the results is derived: if an undone game turns a fill-in into a group winner, that pick simply stops counting and the host is asked to pick again. Older documents may still carry a `dropped` list from when the host picked the winner to leave out at 30 players; it's ignored on load.
 - Who the survival game knocked out isn't stored: it's 3rd place in the survival series' only game.
 - `parseTournament` ([validate.ts](../apps/pvp/src/lib/validate.ts)) rebuilds the document from untrusted JSON and never throws. It rejects unknown players, invalid placements, games saved after a series was decided, and unsupported player counts.
@@ -222,15 +236,14 @@ Framework-free functions in [apps/pvp/src/lib](../apps/pvp/src/lib). They use re
 | Module             | Responsibility                                                                                           |
 | ------------------ | -------------------------------------------------------------------------------------------------------- |
 | `format.ts`        | Supported counts; groups, empty semifinal spots (`fillInSpots`) and extra winners (`dropSpots`, decided by the survival game) per count |
-| `series.ts`        | Per-series records (wins, points, games), winner (override first), placement validation                  |
+| `series.ts`        | Per-series records (wins, points, games), winner (override first), placings (the final's 1st, 2nd, 3rd), survival loser, placement validation |
 | `ranking.ts`       | `compareRecords`, `rankRecords` with recorded draws, tie keys                                            |
-| `qualification.ts` | Group winners and records (works on partial results), `survivalPlan` (winner ranking, the seat cut and its tie), `semifinalSelection` (pick candidates, valid picks, the survival game's loser, semifinalists), seeding order, pending ties |
-| `seeding.ts`       | Snake seeding with fewest-move rematch avoidance inside seed tiers                                       |
-| `draw.ts`          | Fisher–Yates shuffle, random group draw                                                                  |
+| `qualification.ts` | Group winners and records (works on partial results), `survivalPlan` (winner ranking, the seat cut and its tie), `semifinalSelection` (pick candidates, valid picks, the survival game's loser, semifinalists), `semifinalGroups` (the host's draw while it still fits), pending ties |
+| `draw.ts`          | Fisher–Yates shuffle, random group draw, random semifinal draw that keeps first-round group mates apart  |
 | `reducer.ts`       | Every host action and stage transition; replacement candidates                                           |
 | `validate.ts`      | `parseTournament` for untrusted input                                                                    |
 | `names.ts`         | Username normalizing and format check, display-name lookup with username fallback, parsing of the pasted display-name JSON |
-| `polls.ts`         | EasyPoll JSON parsing and matching (voters by username; winner answers read back to usernames through `displayNameIndex`, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard |
+| `polls.ts`         | EasyPoll JSON parsing and matching (voters by username; winner answers read back to usernames through `displayNameIndex`, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard and its prize places (`leaderboardPlaces`) |
 | `i18n.ts`          | The English and Vietnamese message mappings, `Translatable`, and locale-aware number, time and "ago" formatting |
 | `eta.ts`           | Average minutes per game from save timestamps (gaps over 15 min ignored, at least 3 samples) and expected games left |
 
@@ -248,15 +261,16 @@ All changes go through `applyAction(tournament, action, { now, random }) → Res
 | `replacePlayer`                               | A group (setup or group stage), semifinal or final with no games or override yet. In a group the newcomer is a reserve with a display name who isn't in the event, and also replaces the leaver in `players` (draws, picks or a draft left over that name the leaver are dropped); otherwise a participant not playing in that stage |
 | `swapPlayers`                                 | Setup, group stage or semifinals; two players in different series, neither of which has a game or override (clears both series' polls) |
 | `setSemifinalPicks`                           | Group stage at 21/24 players, every group decided; fill-ins must be non-winners, at most the number of spots (partial picks allowed). Clears any semifinal arrangement |
-| `arrangeSemifinals`, `resetSemifinalDraft`    | Group stage, once the semifinal groups exist (picks made, ties drawn): swap two players between draft groups, or go back to the seeded groups |
+| `drawSemifinals`                              | Group or survival stage, once the 9 semifinalists are settled: draw the groups at random (again replaces the groups and swaps) |
+| `arrangeSemifinals`                           | After the draw, before the semifinals start: swap two players between the drawn groups |
 | `recordPoll`, `clearPoll`                     | Any series; record takes the imported ballots (at least one, one per member) |
 | `recordGamesPoll`, `clearGamesPoll`           | Any series that isn't a single match; same ballot rules, and the phase's fixed line is copied into the recorded poll |
 | `resolveTies`                                 | There are pending ties (repeats while new ties surface)         |
-| `advance`                                     | Every series in the stage decided, semifinal picks complete (group stage), no pending ties |
+| `advance`                                     | Every series in the stage decided, semifinal picks complete (group stage), no pending ties, and the semifinal groups drawn before the semifinals start |
 | `reopenStage`                                 | After setup; groups → setup only while no group has results     |
 | `reset`                                       | Any time; keeps the display names (earlier saves stay restorable) |
 
-`advance` creates the next stage's series: at 30 players, the survival game first (`P`, one game, once any tie at the seat cut is drawn); then the semifinals (`S1`–`S3`) exactly as arranged (or seeded), first to 2; then the grand final (`F`, first to 3); then `done`. `overrideWinner` doesn't apply to the survival game, and `reopenStage` steps back through it (semifinals → survival game → group stage; leaving the survival stage removes the game). A draft that no longer holds exactly the current semifinalists (say, after new picks) is ignored and the seeded groups are used. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draft, so nothing has to be redone. A new participant list or a redraw clears both.
+`advance` creates the next stage's series: at 30 players, the survival game first (`P`, one game, once any tie at the seat cut is drawn); then the semifinals (`S1`–`S3`) exactly as drawn and arranged, first to 2; then the grand final (`F`, first to 3); then `done`. `overrideWinner` doesn't apply to the survival game, and `reopenStage` steps back through it (semifinals → survival game → group stage; leaving the survival stage removes the game). A draw that no longer holds exactly the current semifinalists (say, after new picks) is ignored, and the host draws again. Going back from the semifinals keeps the host's picks and turns the semifinal groups back into the draw, so nothing has to be redone. A new participant list or a redraw clears both.
 
 The host page uses `crypto.getRandomValues` for draws, so no one can claim the draw was rigged.
 
@@ -267,11 +281,12 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 ### 6.1 Viewer page
 
 - **Layout**: a brush-script title under a "武林大会" seal, then the bracket in the main column and the prediction leaderboard beside it. On wide screens (≥ 1024 px) the leaderboard is a sticky side column, so it never scrolls away; on phones it docks at the bottom of the screen with the current leader and opens as a sheet.
-- **Bảng Thần Toán / Oracle Ranking** (the prediction leaderboard): a hanging scroll with the crowd's record on both questions and every member ranked by correct picks (winner, over/under and total). Ties share a rank, and the top three wear the imperial exam's seals: 状元 Trạng nguyên, 榜眼 Bảng nhãn, 探花 Thám hoa. It shows even before the first predicted series finishes, so viewers know where to look.
+- **Bảng Thần Toán / Oracle Ranking** (the prediction leaderboard): a hanging scroll with the crowd's record on both questions and every member ranked by correct picks (winner, over/under and total). The prize places (§2.5: shared by ties, and no more places once three members hold one) wear the imperial exam's seals: 状元 Trạng nguyên for 1st, 榜眼 Bảng nhãn for 2nd, 探花 Thám hoa for 3rd. Everyone else shows their position number. It shows even before the first predicted series finishes, so viewers know where to look.
 - **Now playing**: the live series with each player's game placements and win pips, plus "next series in about N minutes" once there's enough timing data. When nothing is live: "Waiting for the host to start the next series" and the next series "on deck".
-- **Road to the semifinals** (group stage, and the survival game at 30 players): the qualification rule in plain words for the player count, the group winners, and the host's picks; at 30 players also who plays the survival game (or a note while its last seat waits for a draw) and who it knocked out, struck through among the winners.
+- **Champion banner** (once the final is decided): the champion's name, then the runner-up and 3rd place, or two runners-up when they're level on points (§2.1). The final's card also tags 2nd and 3rd.
+- **Road to the semifinals** (group stage, and the survival game at 30 players): the qualification rule in plain words for the player count, that the semifinal groups are drawn at random, the group winners, and the host's picks; at 30 players also who plays the survival game (or a note while its last seat waits for a draw) and who it knocked out, struck through among the winners.
 - **Survival game** (30 players): its own bracket section under a 危 seal, shown as a draft as soon as the seats are settled. The card has no crown: it marks the player who finished 3rd as out, explains "1st and 2nd go through, 3rd is out", and its vote shares are predictions for who goes out.
-- **Series cards**: per-game place chips, win pips, crown for the winner, "Live / Finished / Upcoming", the series length ("first to 2", "first to 3" or "one match"), vote shares when a poll was recorded, the over/under line with its vote split and, once finished, the result ("3 ván: Trên"), and the reason for any override.
+- **Series cards**: per-game place chips, win pips, crown for the winner, "Live / Finished / Upcoming", the series length ("first to 2", "first to 3" or "one match"), vote shares when a poll was recorded, the over/under line with its vote split and, once finished, the result ("3 ván: ra Trên"), and the reason for any override. The semifinal section only appears once the host starts the semifinals.
 - **Recent results** (newest first; identical timestamps fall back to play order).
 - **Motion**: sections and cards fade in, a saved game's placing is stamped onto the card, a win pip fills like a drop of ink, the live card glows with a "战" seal, the champion banner is stamped in with a gold sheen, and leaderboard rows slide to their new rank and flash when a member's score goes up. Plum petals fall and mist drifts behind the page. All of it is off when the device asks for reduced motion. The full look and motion catalogue is in §6.4.
 - Status shows "Live · updated just now" or "Offline", and the last good state stays on screen while offline.
@@ -282,8 +297,8 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 - **Setup**: paste the display-name JSON (or choose a file) and save; paste the participants' Discord usernames one per line (with or without "@", any case), which previews their display names and flags anything that isn't a valid username, is repeated or has no display name; save, draw groups (redraw any time before starting), adjust the draw by tapping two players in different groups to swap them, then start the group stage.
 - **Rearrange players** (group stage and semifinals, collapsed under the series list): the same tap-to-swap for groups that haven't started; started groups are shown locked. In the semifinals each name shows its first-round group, and rematches are flagged.
 - **Game entry**: tap the winner, then the runner-up; third place fills itself in. Save, Undo last game, and "Show as live" to mark a series as playing before its first result. Picks clear as soon as a game is saved, so a double tap can't save it twice.
-- **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has copy-ready question and answers, a votes JSON import with preview (the only way to record votes), and a clear button once recorded.
-- **Stage gate** (once every series in the stage is decided): who's through; at 21 or 24 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); at 30 players, the 10 winners best first with their records, the three survival seats marked (certain seats solid, players tied for the last seat dashed until the draw); pending ties and the draw button, recent draws, the semifinal groups as viewers see them with tap-to-swap (and "Back to the seeded groups" after any swap), and the advance button ("Start the survival game", "Start the semifinals", "Start the grand final", "Finish the tournament"). After the survival game, the gate names who went out.
+- **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has the question and every answer with its own copy button (EasyPoll takes each answer in a separate field), a votes JSON import with preview (the only way to record votes), and a clear button once recorded.
+- **Stage gate** (once every series in the stage is decided): who's through; at 21 or 24 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); at 30 players, the 10 winners best first with their records, the three survival seats marked (certain seats solid, players tied for the last seat dashed until the draw); pending ties and the draw button, recent draws, "Draw the semifinal groups" once the semifinalists are settled, then the drawn groups (private to the host) with tap-to-swap and "Redraw", and the advance button ("Start the survival game", "Start the semifinals", which needs the draw, "Start the grand final", "Finish the tournament"). After the survival game, the gate names who went out; after the final, the champion, 2nd and 3rd.
 - **Save indicator**: "Saving…", "All changes saved", or "Not saved" with a retry button.
 - **Host tools**: see §2.4, plus "Display names" once the event has started (the same JSON editor as in setup, for typos and voters missing from the list), "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
 
@@ -293,6 +308,7 @@ The app speaks **Vietnamese (default) and English**, switched with the VI / EN t
 
 - All text lives in one mapping, [apps/pvp/src/lib/i18n.ts](../apps/pvp/src/lib/i18n.ts): English defines the shape and Vietnamese must match it key for key, so a missing translation fails the typecheck.
 - Errors from the rules (`applyAction`), the votes JSON parser and the API come back as functions of the messages, so they render in whichever language is selected, even after switching.
+- **Vietnamese tone**: casual, natural and a little playful, the way the guild talks. The viewer page leans into the martial-arts flavour ("Chiến báo", "Đang giao đấu", "dừng bước", "lên ngôi vô địch"); the host page stays clear first ("Lên sóng", "Hủy ván vừa lưu", "Bốc thăm bán kết"). Gamer loanwords are fine where Vietnamese players actually use them: "Live", "Copy", "username", "kèo" for the over/under. Avoid literal translations of the English, like "chạm 2" for "first to 2" ("ai thắng 2 ván trước" instead).
 - Series names ("Bảng 3", "Bán kết 2", "Chung kết") are derived from the series id and stage. The English `label` stored in the document is kept only for older data.
 - Numbers follow the locale: "1,33 điểm/ván", "Trên 2,5 ván" in Vietnamese; "1.33 pts/game", "Over 2.5 games" in English. Times use the 24-hour clock in both.
 - Poll questions copy in the selected language. The importer reads over/under answers in either language, so a poll posted in one language and imported in the other still works. Winner answers are display names, which aren't translated.
@@ -360,14 +376,14 @@ All three viewer fonts load from Google Fonts in `index.html`; Ma Shan Zheng is 
   | 决       | decisive          | Grand final                            |
   | 录       | record            | Recent results                         |
   | 神算     | divine reckoning  | Prediction leaderboard                 |
-  | 状元 榜眼 探花 | the imperial exam's top three | Ranks 1–3 on the leaderboard, with tooltips naming the title in the selected language (Trạng nguyên, Bảng nhãn, Thám hoa) |
+  | 状元 榜眼 探花 | the imperial exam's top three | The leaderboard's prize places 1st–3rd (shared by ties), with tooltips naming the title in the selected language (Trạng nguyên, Bảng nhãn, Thám hoa) |
   | 冠军     | champion          | Champion banner                        |
 
 - **Section headings** (`Section` with `icon={<Seal text='…' />}`): seal, uppercase serif title, and a cinnabar brush stroke that sweeps in underneath.
 - **Header**: the 武林大会 seal stamps in, the event name in brush script, a cinnabar stroke that draws itself, then the stage on a small paper pill and a live dot that pings.
 - **Series cards**: placings as coins (1st gold, 2nd silver, 3rd outlined), wins as ink drops, a gently bobbing crown for the winner, and a lift on hover. The live card gets a cinnabar border, a slow glow and a 战 seal on its corner.
-- **Champion banner**: a gilded scroll with the name in brush script, a 冠军 seal and a gold sheen that passes over it.
-- **Prediction leaderboard**: a hanging scroll (`scroll-board`, wooden rods top and bottom) around paper. Rank seals mark the top three; everyone else gets a numbered circle. The leader's row is tinted gold, with the score large and the picks small.
+- **Champion banner**: a gilded scroll with the name in brush script, the runner(s)-up and 3rd place in a line below it, a 冠军 seal and a gold sheen that passes over it.
+- **Prediction leaderboard**: a hanging scroll (`scroll-board`, wooden rods top and bottom) around paper. Rank seals mark the prize places; everyone else gets a numbered circle with their position. Rows in 1st place are tinted gold, with the score large and the picks small.
 - **Backdrop** (`InkBackdrop`): a pale cinnabar sun, three ink-wash ridges at 7–14 % opacity, three drifting mist bands and nine falling plum petals. It's fixed behind everything, and its positions are fixed in code (no randomness), so it looks the same on every device.
 - **Layout**: `max-w-7xl`; at 1024 px and up, the main column plus a 21 rem sticky side column for the leaderboard; below that, a bottom dock that opens a sheet, with bottom padding so it never covers content. Sections sit `gap-10` apart; series grids run one, two (`sm`) or three (`xl`) columns.
 
@@ -519,7 +535,7 @@ The host's full step-by-step list, with every button in both languages and a "wh
 1. Before the event: open `/host`, enter the PIN, set the event name, paste the display-name JSON (every participant plus everyone likely to vote), then paste the participants' Discord usernames.
 2. Draw the groups (redraw if needed, or swap individual players) and share the viewer link in Discord. The draw shows on the viewer page right away. If someone doesn't show up, swap in a reserve with Host tools → "Replace a player" before their group plays (add the reserve to the display names first).
 3. For each series: "Show as live", post the two EasyPolls (winner and over/under) from the copied questions and answers, and record each game with two taps. When a poll closes, run the console snippet on its EasyPoll votes page and paste the copied JSON into the matching section of the poll panel. The JSON is the only way to record votes, so import both polls for every series, ideally before it finishes, so the predictor leaderboard updates as soon as the result is saved.
-4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots. At 30, draw for the last survival seat if the gate asks, start the survival game, post its "who goes out?" poll, and record it like any other game. Then break any seeding ties with the draw button. The semifinal groups now appear for viewers: rearrange them if needed and start the semifinals. Then post the semifinal polls from each series' poll panel.
+4. At the end of the group stage: at 21 or 24 players pick who fills the empty semifinal spots. At 30, draw for the last survival seat if the gate asks, start the survival game, post its "who goes out?" poll, and record it like any other game. Then press "Draw the semifinal groups", swap players if needed (only you see the groups), and start the semifinals; that's when viewers see them. Then post the semifinal polls from each series' poll panel.
 5. Download the JSON backup after each stage.
 
 ---
@@ -529,7 +545,7 @@ The host's full step-by-step list, with every button in both languages and a "wh
 ### Phase 1 — MVP (implemented)
 
 - [x] `apps/pvp` scaffold (Vite + React + TS + Tailwind 4, port 2140), root scripts `dev:pvp` / `build:pvp`
-- [x] Pure rules: format, series records, ranking with recorded draws, qualification, snake seeding, reducer, validation, ETA, polls
+- [x] Pure rules: format, series records, ranking with recorded draws, qualification, random semifinal draw, final placings, leaderboard places, reducer, validation, ETA, polls
 - [x] API + storage: one Vercel Function, Upstash Redis with compare-and-set and capped history, PIN auth, dev middleware
 - [x] Host page: PIN gate, setup and draw, two-tap entry, polls import, stage gate, host tools
 - [x] Host control over line-ups: tap-to-swap players in the group draw and the semifinals; host picks for empty semifinal spots (21, 24), replacing the runner-up and play-in rules; reserves for no-shows in groups that haven't played, without a redraw

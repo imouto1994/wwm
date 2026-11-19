@@ -1,7 +1,7 @@
 import { useI18n } from '@/hooks/useI18n';
 import type { Messages } from '@/lib/i18n';
 import { crowdFavorite, crowdGamesPick, gamesLineOf, gamesOutcome, gamesShares, hasGamesPrediction, voteShares } from '@/lib/polls';
-import { isSeriesComplete, seriesWinner, seriesWins, survivalLoser } from '@/lib/series';
+import { isSeriesComplete, seriesPlacings, seriesWinner, seriesWins, survivalLoser } from '@/lib/series';
 import type { PlayerId, Series } from '@/types/tournament';
 import { Crown, Radio } from 'lucide-react';
 
@@ -63,6 +63,8 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
   // The survival game has no champion to crown: 1st and 2nd both go through, only 3rd place is out.
   const winner = isSurvival ? undefined : seriesWinner(series);
   const out = survivalLoser(series);
+  // The final's 2nd and 3rd places win prizes too, so they're named on its card.
+  const placings = series.stage === 'final' ? seriesPlacings(series) : undefined;
   const wins = seriesWins(series);
   const shares = voteShares(series);
   const favorite = crowdFavorite(series);
@@ -82,6 +84,7 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
         {series.playerIds.map((playerId, index) => {
           const isWinner = winner === playerId;
           const isOut = out === playerId;
+          const podiumPlace = placings?.find((placing) => placing.playerId === playerId)?.place;
           const share = shares?.[index];
           return (
             <li key={playerId} className='flex items-center justify-between gap-2 text-sm'>
@@ -89,6 +92,7 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
                 {isWinner && <Crown size={14} className='shrink-0' />}
                 <span className={`truncate ${isOut ? 'line-through' : ''}`}>{nameOf(playerId)}</span>
                 {isOut && <span className='shrink-0 text-xs font-semibold text-red'>{t.card.out}</span>}
+                {podiumPlace && podiumPlace > 1 && <span className='shrink-0 text-xs font-semibold text-fg'>{t.common.podium[podiumPlace - 1]}</span>}
                 {share && (
                   <span className={`shrink-0 text-xs ${favorite === playerId ? 'text-fg' : 'text-muted'}`} title={t.card.discordVotes(share.votes)}>
                     {share.percent}%

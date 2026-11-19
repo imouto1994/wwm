@@ -19,6 +19,7 @@ The host's step-by-step list for event day. Work from top to bottom and tick eac
 
 - **Polls per series:** two for every group, semifinal and the final (who wins, and over/under games). The survival game has one ("who goes out?").
 - **Over/under lines:** 2.5 games for groups and semifinals, 4.5 for the final. The app shows the line in the question, so just copy it.
+- **Prizes:** the final's champion, runner-up and 3rd place (two runners-up and no 3rd if they're level on points in the final), and the top places of the **Bảng Thần Toán** (Oracle Ranking). On the leaderboard, ties share a place, and places stop once three members hold one: two people sharing 1st plus one 2nd means there's no 3rd.
 
 ---
 
@@ -50,9 +51,9 @@ The groups are listed under the entry panel. Tap a card to select it; the next u
 
 **Before the group plays**
 
-- [ ] Post the winner poll: under **Dự đoán trên Discord** (Discord predictions) → **Ai thắng?** (Who wins?), copy the question and the answers into a **non-anonymous** EasyPoll.
-- [ ] Post the over/under poll the same way from **Trên/Dưới số ván** (Over/under games). The line is 2.5.
-- [ ] Press **Đánh dấu đang đấu** (Show as live) so viewers know who's up. Saving the first game also does this.
+- [ ] Post the winner poll: under **Dự đoán trên Discord** (Discord predictions) → **Ai thắng?** (Who wins?), copy the question, then each answer with its own **Copy** button, into a **non-anonymous** EasyPoll.
+- [ ] Post the over/under poll the same way from **Kèo Trên/Dưới** (Over/under games). The line is 2.5.
+- [ ] Press **Lên sóng** (Show as live) so viewers know who's up. Saving the first game also does this.
 - [ ] Close both polls before game 1 starts. The app accepts votes at any time, so this is up to you.
 
 Tip: every group is known once the group stage starts, so you can post the polls for the next few groups ahead of time.
@@ -61,8 +62,8 @@ Tip: every group is known once the group stage starts, so you can post the polls
 
 - [ ] After each game: tap the winner, tap the runner-up (3rd place fills itself in), then **Lưu ván** (Save game).
   - Tapped the wrong player before saving: **Bỏ chọn** (Clear picks).
-  - Saved the wrong game: **Hoàn tác ván cuối** (Undo last game).
-- [ ] A player is absent or drops out mid-series: keep saving games with them in 3rd, or decide the group with **Công cụ BTC → Quyết định người thắng trận** (Override a series winner) and a short reason that viewers will see. An override voids that group's over/under votes.
+  - Saved the wrong game: **Hủy ván vừa lưu** (Undo last game).
+- [ ] A player is absent or drops out mid-series: keep saving games with them in 3rd, or decide the group with **Công cụ BTC → BTC phân xử người thắng** (Override a series winner) and a short reason that viewers will see. An override voids that group's over/under votes.
 - [ ] A player can't play and their group hasn't started: **Thay người** (Replace a player) with a reserve. That group's recorded polls are cleared, so post new ones.
 
 **After**
@@ -74,21 +75,23 @@ Tip: every group is known once the group stage starts, so you can post the polls
 
 ## 4. End of the group stage
 
-When every group is decided, a **Đã xong vòng này** (Stage complete) panel appears at the top.
+When every group is decided, a **Vòng này đã xong!** (Stage complete) panel appears at the top.
+
+The semifinal groups are drawn at random, and **only you see them until you start the semifinals**. Take your time with swaps; viewers won't see anything change.
 
 ### 21 or 24 players
 
 - [ ] Pick who fills the empty semifinal spot (2 spots at 21 players, 1 at 24). Candidates are listed best record first. Each tap saves, and viewers see the pick. **Đổi** (Change) reopens the list.
-- [ ] If tied players are listed, press **Bốc thăm phân định** (Draw to break the ties).
-- [ ] Review the semifinal groups. Viewers already see them as a draft. Tap two players to swap them if needed; a **Tái đấu** (Rematch) note warns about players who already met in the group stage. **Về lại các bảng xếp theo hạt giống** (Back to the seeded groups) undoes your swaps.
-- [ ] Press **Bắt đầu bán kết** (Start the semifinals). It stays disabled until the pick and any draw are done.
+- [ ] Press **Bốc thăm bán kết** (Draw the semifinal groups). Players from the same group are kept apart.
+- [ ] Review the groups. Tap two players to swap them if needed; a **Tái đấu** (Rematch) note warns about players who already met in the group stage. **Bốc thăm lại** (Redraw) draws again and drops your swaps.
+- [ ] Press **Bắt đầu bán kết** (Start the semifinals). It stays disabled until the pick and the draw are done. Viewers see the groups from now on.
 - [ ] Backup: **Công cụ BTC → Tải JSON** (Host tools → Download JSON).
 
 ### 27 players
 
-- [ ] If tied players are listed, press **Bốc thăm phân định** (Draw to break the ties).
-- [ ] Review the semifinal groups and swap players if needed.
-- [ ] Press **Bắt đầu bán kết** (Start the semifinals).
+- [ ] Press **Bốc thăm bán kết** (Draw the semifinal groups).
+- [ ] Review the groups and swap players if needed, or **Bốc thăm lại** (Redraw).
+- [ ] Press **Bắt đầu bán kết** (Start the semifinals). Viewers see the groups from now on.
 - [ ] Backup: **Tải JSON** (Download JSON).
 
 ### 30 players
@@ -103,7 +106,7 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 **Before**
 
 - [ ] Post the only poll for this game: **Ai bị loại?** (Who goes out?). There's no over/under poll.
-- [ ] Press **Đánh dấu đang đấu** (Show as live). Close the poll before the game starts.
+- [ ] Press **Lên sóng** (Show as live). Close the poll before the game starts.
 
 **During**
 
@@ -114,9 +117,9 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 
 - [ ] Import the poll's votes JSON, then **Lưu N phiếu** (Save N votes).
 - [ ] The panel says who's out and lists the 9 semifinalists.
-- [ ] If tied players are listed, press **Bốc thăm phân định** (Draw to break the ties).
-- [ ] Review the semifinal groups and swap players if needed.
-- [ ] Press **Bắt đầu bán kết** (Start the semifinals).
+- [ ] Press **Bốc thăm bán kết** (Draw the semifinal groups). Only you see the groups.
+- [ ] Review the groups and swap players if needed, or **Bốc thăm lại** (Redraw).
+- [ ] Press **Bắt đầu bán kết** (Start the semifinals). Viewers see the groups from now on.
 - [ ] Backup: **Tải JSON** (Download JSON).
 
 ## 6. Semifinals: repeat for each of the 3
@@ -126,7 +129,7 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 - [ ] A semifinalist has to leave: use **Thay người** (Replace a player) before their semifinal starts. The first suggestion follows the rules; at 30 players it's usually the player the survival game knocked out.
 - [ ] To move players between semifinals that haven't started, open **Đổi chỗ người chơi** (Rearrange players) under the list. A swap clears both semifinals' polls.
 - [ ] Post the winner poll and the over/under poll (line 2.5).
-- [ ] Press **Đánh dấu đang đấu** (Show as live). Close both polls before game 1.
+- [ ] Press **Lên sóng** (Show as live). Close both polls before game 1.
 
 **During**
 
@@ -147,7 +150,7 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 
 - [ ] A finalist has to leave: use **Thay người** (Replace a player). The candidates are the other two players from their semifinal.
 - [ ] Post the winner poll and the over/under poll (line **4.5**).
-- [ ] Press **Đánh dấu đang đấu** (Show as live). Close both polls before game 1.
+- [ ] Press **Lên sóng** (Show as live). Close both polls before game 1.
 
 **During**
 
@@ -156,13 +159,14 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 **After**
 
 - [ ] Import both polls' votes JSON and save them.
-- [ ] The panel says **X vô địch giải đấu** (X wins the tournament). Press **Kết thúc giải** (Finish the tournament). The champion banner appears.
+- [ ] The panel says **X lên ngôi vô địch!** (X wins the tournament), followed by **Á quân** (Runner-up) and **Hạng ba** (Third place). Two runners-up means 2nd and 3rd were level on points, so both get the runner-up prize.
+- [ ] Press **Bế mạc giải** (Finish the tournament). The champion banner with all three places stays on both pages.
 - [ ] Backup: **Tải JSON** (Download JSON).
 
 ## 8. After the event
 
 - [ ] Keep the final **Tải JSON** (Download JSON) file somewhere safe. It's the permanent record.
-- [ ] Share the final **Bảng Thần Toán** (Oracle Ranking) from the viewer page with the guild.
+- [ ] Share the final **Bảng Thần Toán** (Oracle Ranking) from the viewer page with the guild. The prize places wear the seals 状元 (1st), 榜眼 (2nd) and 探花 (3rd); everyone else shows a plain number.
 - [ ] Freeze the results with `READ_ONLY=1` ([pvp-deploy.md, Phase 10](pvp-deploy.md#phase-10--after-the-event)).
 - [ ] Before the next event: remove `READ_ONLY`, redeploy, then **Công cụ BTC → Làm lại** (Host tools → Reset) and type `RESET`. The display names are kept.
 
@@ -178,14 +182,14 @@ When every group is decided, a **Đã xong vòng này** (Stage complete) panel a
 
 | Situation                                              | What to do                                                                                                                                         |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Saved the wrong game                                   | **Hoàn tác ván cuối** (Undo last game) in that series                                                                                              |
+| Saved the wrong game                                   | **Hủy ván vừa lưu** (Undo last game) in that series                                                                                              |
 | A wrong result in an earlier stage                     | **Công cụ BTC → Mở lại vòng trước** (Reopen previous stage). It deletes the current stage's series, with their results and polls. Fix the result, then advance again |
 | A player is missing before their group plays           | **Thay người** (Replace a player) with a reserve                                                                                                   |
-| A player is missing mid-series, forfeits or disconnects | Save games with them in 3rd, or **Quyết định người thắng trận** (Override a series winner) with a reason                                         |
+| A player is missing mid-series, forfeits or disconnects | Save games with them in 3rd, or **BTC phân xử người thắng** (Override a series winner) with a reason                                         |
 | A survival game player is missing                      | Save the game with them in 3rd                                                                                                                     |
 | A semifinalist or finalist leaves before their series  | **Thay người** (Replace a player); the suggested candidate is listed first                                                                         |
 | The vote import can't match some answers               | The poll answers must match the display names. Fix the names (**Công cụ BTC → Tên hiển thị**, Display names) or the poll, then import again        |
 | A voter shows as a username on the leaderboard         | Add them to the display names. Paste the full list: saving replaces it                                                                             |
 | Red banner: another tab saved a newer version          | The newer version was loaded. Redo your last change                                                                                                |
-| You need an earlier state back                         | **Công cụ BTC → Khôi phục bản lưu cũ** (Restore an earlier save) → **Tải các bản lưu** (Load saves) → **Khôi phục** (Restore)                      |
+| You need an earlier state back                         | **Công cụ BTC → Khôi phục bản lưu cũ** (Restore an earlier save) → **Xem các bản lưu** (Load saves) → **Khôi phục** (Restore)                      |
 | You're sent back to the PIN screen                     | The PIN was changed on Vercel. Enter the new one                                                                                                   |

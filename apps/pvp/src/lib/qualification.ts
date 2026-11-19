@@ -1,7 +1,6 @@
 import type { PlayerId, Series, Tournament } from '../types/tournament.js';
 import { WINS_NEEDED, formatFor, isSupportedCount } from './format.js';
 import { type Tie, compareRecords, rankRecords } from './ranking.js';
-import { seedSemifinalGroups } from './seeding.js';
 import { type PlayerRecord, seriesRecords, seriesWinner, survivalLoser } from './series.js';
 
 export interface GroupStageOutcome {
@@ -9,7 +8,7 @@ export interface GroupStageOutcome {
   complete: boolean;
   /** Winners of finished groups, in group order. */
   winners: PlayerId[];
-  /** Group-stage record per player: ranks the host's pick candidates and the survival seats, and seeds the semifinals. */
+  /** Group-stage record per player: ranks the host's pick candidates, the survival seats and semifinal replacements. */
   records: Map<PlayerId, PlayerRecord>;
 }
 
@@ -115,34 +114,19 @@ export function semifinalSelection(tournament: Tournament): SemifinalSelection {
   return { fillInSpots, dropSpots, fillIns, dropped, fillInCandidates, ...(semifinalists ? { semifinalists } : {}) };
 }
 
-/** Seeds come from group-stage records, so group winners normally rank above fill-ins. */
-export function seedingOrder(tournament: Tournament, semifinalists: readonly PlayerId[]): { order: PlayerId[]; ties: Tie[] } {
-  const { records } = groupStageOutcome(tournament);
-  return rankRecords(
-    semifinalists.map((playerId) => recordOf(records, playerId)),
-    'seeding',
-    tournament.tieDraws
-  );
-}
-
 /**
- * The semifinal groups as they stand before the semifinals start: the host's
- * arrangement when it still holds exactly the current semifinalists,
- * otherwise the seeded groups. Undefined until the group stage, the host's
- * picks or the survival game, and the seeding draws are all done. Viewers see this too.
+ * The semifinal groups the host drew (and maybe rearranged), while they still
+ * hold exactly the current semifinalists. Undefined before the draw, or once
+ * new picks or changed results alter who's through. Only the host sees them
+ * until the semifinals start.
  */
 export function semifinalGroups(tournament: Tournament): PlayerId[][] | undefined {
   const { semifinalists } = semifinalSelection(tournament);
-  if (!semifinalists) return undefined;
   const draft = tournament.semifinalDraft;
-  if (draft) {
-    const members = new Set(draft.flat());
-    if (members.size === semifinalists.length && semifinalists.every((playerId) => members.has(playerId))) return draft.map((group) => [...group]);
-  }
-  const seeding = seedingOrder(tournament, semifinalists);
-  if (seeding.ties.length > 0) return undefined;
-  const firstRoundGroup = new Map(groupSeries(tournament).flatMap((series) => series.playerIds.map((playerId) => [playerId, series.id] as const)));
-  return seedSemifinalGroups(seeding.order, (playerId) => firstRoundGroup.get(playerId));
+  if (!semifinalists || !draft) return undefined;
+  const members = new Set(draft.flat());
+  const current = members.size === semifinalists.length && semifinalists.every((playerId) => members.has(playerId));
+  return current ? draft.map((group) => [...group]) : undefined;
 }
 
 /** Semifinal series for a set of groups; used both to start the semifinals and to preview them. */
@@ -158,16 +142,10 @@ export function semifinalSeriesFrom(groups: readonly PlayerId[][]): Series[] {
 }
 
 /**
- * Ties that need a recorded draw before the tournament can move on: at 30
- * players, a tie at the survival seat cut during the group stage; otherwise
- * the semifinal seeding ties, known once the picks or the survival game are done.
+ * Ties that need a recorded draw before the tournament can move on. Only the
+ * 30-player survival seat cut has one; the semifinal groups are drawn at
+ * random as a whole, so nothing else is ranked.
  */
 export function pendingTies(tournament: Tournament): Tie[] {
-  if (tournament.stage === 'groups') {
-    const plan = survivalPlan(tournament);
-    if (plan) return plan.ties;
-  }
-  if (tournament.stage !== 'groups' && tournament.stage !== 'survival') return [];
-  const { semifinalists } = semifinalSelection(tournament);
-  return semifinalists ? seedingOrder(tournament, semifinalists).ties : [];
+  return tournament.stage === 'groups' ? (survivalPlan(tournament)?.ties ?? []) : [];
 }

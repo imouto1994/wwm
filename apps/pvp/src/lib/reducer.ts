@@ -1,5 +1,5 @@
 import type { Ballot, GamesBallot, Placement, PlayerId, Series, SeriesStage, Stage, TieDraw, Tournament } from '../types/tournament.js';
-import { type Random, drawGroupSeries, shuffle } from './draw.js';
+import { type Random, drawGroupSeries, drawSemifinalGroups, shuffle } from './draw.js';
 import { SUPPORTED_COUNTS, WINS_NEEDED, formatFor, isSupportedCount } from './format.js';
 import type { Translatable } from './i18n.js';
 import { MAX_DISPLAY_NAME, MAX_DISPLAY_NAMES, isDiscordUsername, nameLookup, normalizeUsername } from './names.js';
@@ -15,7 +15,7 @@ import {
   survivalSeriesFrom,
 } from './qualification.js';
 import { compareRecords } from './ranking.js';
-import { type PlayerRecord, isSeriesComplete, isValidPlacement, seriesRecords, seriesWinner } from './series.js';
+import { type Placing, type PlayerRecord, isSeriesComplete, isValidPlacement, seriesPlacings, seriesRecords, seriesWinner } from './series.js';
 
 const emptyRecord = (playerId: PlayerId): PlayerRecord => ({ playerId, wins: 0, points: 0, games: 0 });
 
@@ -50,8 +50,8 @@ export type Action =
   | { type: 'replacePlayer'; seriesId: string; outId: PlayerId; inId: PlayerId }
   | { type: 'swapPlayers'; firstId: PlayerId; secondId: PlayerId }
   | { type: 'setSemifinalPicks'; fillIns: PlayerId[] }
+  | { type: 'drawSemifinals' }
   | { type: 'arrangeSemifinals'; firstId: PlayerId; secondId: PlayerId }
-  | { type: 'resetSemifinalDraft' }
   | { type: 'recordPoll'; seriesId: string; ballots: Ballot[] }
   | { type: 'clearPoll'; seriesId: string }
   | { type: 'recordGamesPoll'; seriesId: string; ballots: GamesBallot[] }
@@ -89,6 +89,12 @@ export function isStageComplete(tournament: Tournament): boolean {
 export function championOf(tournament: Tournament): PlayerId | undefined {
   const final = tournament.series.find((series) => series.stage === 'final');
   return final ? seriesWinner(final) : undefined;
+}
+
+/** Champion, 2nd and 3rd once the grand final is decided (see seriesPlacings). */
+export function finalStandings(tournament: Tournament): Placing[] | undefined {
+  const final = tournament.series.find((series) => series.stage === 'final');
+  return final ? seriesPlacings(final) : undefined;
 }
 
 /** The stage `advance` moves to, or undefined at the end. */
@@ -193,13 +199,22 @@ function withoutDraft({ semifinalDraft: _cleared, ...tournament }: Tournament): 
 }
 
 /**
- * Swaps two players between the semifinal groups before the semifinals start.
- * The arrangement is saved as a draft, so viewers watch it take shape and
- * `advance` starts exactly these groups.
+ * Draws the semifinal groups at random once the semifinalists are known.
+ * Drawing again replaces the groups and any swaps. The result is a draft that
+ * only the host sees until `advance` starts exactly these groups.
  */
+function drawSemifinals(tournament: Tournament, random: Random): ActionResult {
+  if (tournament.stage !== 'groups' && tournament.stage !== 'survival') return fail((t) => t.errors.semifinalDrawTooLate);
+  const { semifinalists } = semifinalSelection(tournament);
+  if (!semifinalists) return fail((t) => t.errors.semifinalistsNotReady);
+  const firstRoundGroup = new Map(groupSeries(tournament).flatMap((series) => series.playerIds.map((playerId) => [playerId, series.id] as const)));
+  return ok({ ...tournament, semifinalDraft: drawSemifinalGroups(semifinalists, (playerId) => firstRoundGroup.get(playerId), random) });
+}
+
+/** Swaps two players between the drawn semifinal groups before the semifinals start. */
 function arrangeSemifinals(tournament: Tournament, firstId: PlayerId, secondId: PlayerId): ActionResult {
   const groups = tournament.stage === 'groups' || tournament.stage === 'survival' ? semifinalGroups(tournament) : undefined;
-  if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
+  if (!groups) return fail((t) => t.errors.drawSemifinalsFirst);
   const firstGroup = groups.findIndex((group) => group.includes(firstId));
   const secondGroup = groups.findIndex((group) => group.includes(secondId));
   if (firstGroup < 0 || secondGroup < 0) return fail((t) => t.errors.notSemifinalists);
@@ -306,7 +321,7 @@ function setSemifinalPicks(tournament: Tournament, fillIns: PlayerId[]): ActionR
     return fail((t) => (selection.fillInSpots === 0 ? t.errors.allSpotsFilled : t.errors.tooManyFillIns(selection.fillInSpots)));
   }
   if (uniqueFillIns.some((playerId) => !selection.fillInCandidates.includes(playerId))) return fail((t) => t.errors.fillInNotWinner);
-  // Different picks mean different semifinalists, so any arrangement starts over from the seeding.
+  // Different picks mean different semifinalists, so the semifinal groups have to be drawn again.
   return ok({ ...withoutDraft(tournament), semifinalPicks: { fillIns: uniqueFillIns } });
 }
 
@@ -318,10 +333,10 @@ function playableOrError(tournament: Tournament, seriesId: string): Series | Tra
   return series;
 }
 
-/** Starts the semifinals from the groups as arranged (or seeded); the draft lives on in the series themselves. */
+/** Starts the semifinals from the drawn groups as the host left them; the draft lives on in the series themselves. */
 function createSemifinals(tournament: Tournament): ActionResult {
   const groups = semifinalGroups(tournament);
-  if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
+  if (!groups) return fail((t) => t.errors.drawSemifinalsFirst);
   const semis = semifinalSeriesFrom(groups);
   return ok({ ...withoutDraft(tournament), stage: 'semis', series: [...tournament.series, ...semis], currentSeriesId: undefined });
 }
@@ -343,10 +358,7 @@ function advance(tournament: Tournament): ActionResult {
     return createSemifinals(tournament);
   }
 
-  if (tournament.stage === 'survival') {
-    if (pendingTies(tournament).length > 0) return fail((t) => t.errors.resolveTiesFirst);
-    return createSemifinals(tournament);
-  }
+  if (tournament.stage === 'survival') return createSemifinals(tournament);
 
   if (tournament.stage === 'semis') {
     const winners = playableSeries(tournament).map((series) => seriesWinner(series) as PlayerId);
@@ -520,12 +532,11 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
     case 'setSemifinalPicks':
       return setSemifinalPicks(tournament, action.fillIns);
 
+    case 'drawSemifinals':
+      return drawSemifinals(tournament, context.random);
+
     case 'arrangeSemifinals':
       return arrangeSemifinals(tournament, action.firstId, action.secondId);
-
-    case 'resetSemifinalDraft':
-      if (!tournament.semifinalDraft) return fail((t) => t.errors.noDraft);
-      return ok(withoutDraft(tournament));
 
     case 'recordPoll':
       return recordPoll(tournament, action.seriesId, action.ballots, context.now);

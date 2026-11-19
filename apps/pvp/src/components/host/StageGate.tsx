@@ -6,10 +6,10 @@ import { useI18n } from '@/hooks/useI18n';
 import { type Messages, describeRecord } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
 import { groupSeries, groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom, survivalPlan } from '@/lib/qualification';
-import { championOf, nextStage, playableSeries } from '@/lib/reducer';
+import { finalStandings, nextStage, playableSeries } from '@/lib/reducer';
 import { seriesWinner } from '@/lib/series';
 import type { Tournament } from '@/types/tournament';
-import { ChevronRight, Dice5, RotateCcw } from 'lucide-react';
+import { ChevronRight, Dice5 } from 'lucide-react';
 
 interface StageGateProps {
   host: HostController;
@@ -63,8 +63,8 @@ function SurvivalSeats({ tournament }: { tournament: Tournament }) {
 /**
  * Shown once every series in the stage is finished: who goes through, the
  * host's semifinal picks (21 and 24 players) or the survival seats (30
- * players), any ties that need an on-screen draw, the semifinal groups to
- * arrange (already public), and the button to move on.
+ * players), any ties that need an on-screen draw, the semifinal draw and its
+ * groups to rearrange (private until the semifinals start), and the button to move on.
  */
 export function StageGate({ host, tournament }: StageGateProps) {
   const { t } = useI18n();
@@ -76,6 +76,7 @@ export function StageGate({ host, tournament }: StageGateProps) {
   const plan = tournament.stage === 'groups' ? survivalPlan(tournament) : undefined;
   const selection = beforeSemis ? semifinalSelection(tournament) : undefined;
   const picksMissing = tournament.stage === 'groups' && !plan && Boolean(selection && !selection.semifinalists);
+  const canDrawSemis = Boolean(selection?.semifinalists);
   const draftGroups = beforeSemis ? semifinalGroups(tournament) : undefined;
   const recentDraws = tournament.tieDraws.slice(-4).reverse();
 
@@ -94,8 +95,13 @@ export function StageGate({ host, tournament }: StageGateProps) {
         .join(', ')
     );
   } else if (tournament.stage === 'final') {
-    const champion = championOf(tournament);
-    summary = champion ? t.gate.championWins(nameOf(champion)) : undefined;
+    const standings = finalStandings(tournament);
+    summary = standings
+      ? [
+          t.gate.championWins(nameOf(standings[0].playerId)),
+          ...standings.slice(1).map(({ playerId, place }) => `${t.common.podium[place - 1]}: ${nameOf(playerId)}.`),
+        ].join(' ')
+      : undefined;
   }
 
   return (
@@ -135,28 +141,37 @@ export function StageGate({ host, tournament }: StageGateProps) {
         </div>
       )}
 
-      {draftGroups && (
+      {canDrawSemis && (
         <div className='flex flex-col gap-2'>
-          <p className='text-sm text-fg'>{t.gate.preview}</p>
-          <RearrangePanel
-            host={host}
-            tournament={tournament}
-            series={semifinalSeriesFrom(draftGroups)}
-            onSwap={(firstId, secondId) => host.dispatch({ type: 'arrangeSemifinals', firstId, secondId })}
-          />
-          {tournament.semifinalDraft && (
-            <div>
-              <Button onClick={() => host.dispatch({ type: 'resetSemifinalDraft' })}>
-                <RotateCcw size={14} /> {t.gate.resetDraft}
-              </Button>
-            </div>
+          <p className='text-sm text-fg'>{draftGroups ? t.gate.semisPrivate : t.gate.semisDrawIntro}</p>
+          {draftGroups && (
+            <RearrangePanel
+              host={host}
+              tournament={tournament}
+              series={semifinalSeriesFrom(draftGroups)}
+              onSwap={(firstId, secondId) => host.dispatch({ type: 'arrangeSemifinals', firstId, secondId })}
+            />
           )}
+          <div>
+            <Button
+              variant={draftGroups ? 'secondary' : 'primary'}
+              onClick={() => {
+                if (!draftGroups || window.confirm(t.gate.redrawSemisConfirm)) host.dispatch({ type: 'drawSemifinals' });
+              }}
+            >
+              <Dice5 size={16} /> {draftGroups ? t.gate.redrawSemis : t.gate.drawSemis}
+            </Button>
+          </div>
         </div>
       )}
 
       {advanceLabel && (
         <div>
-          <Button variant='primary' onClick={() => host.dispatch({ type: 'advance' })} disabled={ties.length > 0 || picksMissing}>
+          <Button
+            variant='primary'
+            onClick={() => host.dispatch({ type: 'advance' })}
+            disabled={ties.length > 0 || picksMissing || (next === 'semis' && !draftGroups)}
+          >
             {advanceLabel} <ChevronRight size={16} />
           </Button>
         </div>

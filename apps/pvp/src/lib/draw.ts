@@ -13,6 +13,29 @@ export function shuffle<T>(items: readonly T[], random: Random): T[] {
   return result;
 }
 
+/**
+ * Random split of the nine semifinalists into three groups of three. Players
+ * who met in the same first-round group (a winner and a fill-in from it) are
+ * kept apart by redrawing, which keeps every rematch-free split equally likely.
+ * The attempt cap only guards against an impossible field; real ones always
+ * have a rematch-free split.
+ */
+export function drawSemifinalGroups(
+  playerIds: readonly PlayerId[],
+  firstRoundGroupOf: (playerId: PlayerId) => string | undefined,
+  random: Random
+): [PlayerId, PlayerId, PlayerId][] {
+  if (playerIds.length !== 9) throw new Error(`The semifinal draw needs 9 players, got ${playerIds.length}.`);
+  const split = (order: PlayerId[]): [PlayerId, PlayerId, PlayerId][] => [0, 3, 6].map((start) => [order[start], order[start + 1], order[start + 2]]);
+  const hasRematch = (group: readonly PlayerId[]) => {
+    const origins = group.map(firstRoundGroupOf).filter((origin) => origin !== undefined);
+    return new Set(origins).size < origins.length;
+  };
+  let groups = split(shuffle(playerIds, random));
+  for (let attempt = 1; attempt < 1000 && groups.some(hasRematch); attempt++) groups = split(shuffle(playerIds, random));
+  return groups;
+}
+
 /** Random draw into first-to-2 groups of three, numbered in play order. */
 export function drawGroupSeries(playerIds: readonly PlayerId[], random: Random): Series[] {
   if (playerIds.length % 3 !== 0) throw new Error('Players must split evenly into groups of three.');

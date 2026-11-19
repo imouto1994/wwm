@@ -1,6 +1,6 @@
 import type { Placement, PlayerId, Series } from '../types/tournament.js';
 
-/** Points per finishing place, used only for tiebreaks (1st, 2nd, 3rd). */
+/** Points per finishing place (1st, 2nd, 3rd), for tiebreaks and the final's 2nd and 3rd places. */
 export const PLACE_POINTS = [3, 1, 0] as const;
 
 /** One player's results within a set of games. */
@@ -45,6 +45,29 @@ export function seriesWinner(series: Series): PlayerId | undefined {
 
 export function isSeriesComplete(series: Series): boolean {
   return seriesWinner(series) !== undefined;
+}
+
+export interface Placing {
+  playerId: PlayerId;
+  place: 1 | 2 | 3;
+}
+
+/**
+ * Places in a decided series: the winner is 1st and the other two are ranked
+ * by the points they scored in it. Level on points, both are 2nd, since the
+ * final's places are prizes and a tie shouldn't cost anyone theirs.
+ */
+export function seriesPlacings(series: Series): Placing[] | undefined {
+  const winner = seriesWinner(series);
+  if (!winner) return undefined;
+  const [second, third] = seriesRecords(series)
+    .filter((record) => record.playerId !== winner)
+    .sort((a, b) => b.points - a.points);
+  return [
+    { playerId: winner, place: 1 },
+    { playerId: second.playerId, place: 2 },
+    { playerId: third.playerId, place: second.points === third.points ? 2 : 3 },
+  ];
 }
 
 /** The player knocked out by the survival game: 3rd place in its only game. */

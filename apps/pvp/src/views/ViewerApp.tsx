@@ -13,8 +13,8 @@ import { useNow } from '@/hooks/useNow';
 import { useTournamentFeed } from '@/hooks/useTournamentFeed';
 import { formatAgo } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
-import { semifinalGroups, semifinalSeriesFrom, survivalPlan, survivalSeriesFrom } from '@/lib/qualification';
-import { championOf } from '@/lib/reducer';
+import { survivalPlan, survivalSeriesFrom } from '@/lib/qualification';
+import { finalStandings } from '@/lib/reducer';
 import { isSeriesComplete } from '@/lib/series';
 import type { Series, SeriesStage, Tournament } from '@/types/tournament';
 
@@ -27,10 +27,10 @@ const STAGE_SECTIONS: { stage: SeriesStage; title: 'final' | 'semis' | 'survival
 ];
 
 /**
- * The series to show for a stage. Line-ups are public as soon as they're
- * known: the group draw during setup, the survival game once its seats are
- * settled, and the semifinal groups (seeded, or as the host arranged them)
- * before they start. Viewers see those as drafts.
+ * The series to show for a stage. Line-ups set by the rules are shown as
+ * drafts as soon as they're known: the group draw during setup and the
+ * survival game once its seats are settled. The semifinal groups stay hidden
+ * until the host starts them, since the host may still redraw or rearrange.
  */
 function sectionSeries(tournament: Tournament, stage: SeriesStage): { series: Series[]; isDraft: boolean } {
   const series = tournament.series.filter((entry) => entry.stage === stage);
@@ -38,10 +38,6 @@ function sectionSeries(tournament: Tournament, stage: SeriesStage): { series: Se
   if (stage === 'survival' && tournament.stage === 'groups') {
     const seats = survivalPlan(tournament)?.seats;
     if (seats) return { series: [survivalSeriesFrom(seats)], isDraft: true };
-  }
-  if (stage === 'semi' && (tournament.stage === 'groups' || tournament.stage === 'survival')) {
-    const groups = semifinalGroups(tournament);
-    if (groups) return { series: semifinalSeriesFrom(groups), isDraft: true };
   }
   return { series, isDraft: false };
 }
@@ -56,12 +52,11 @@ function Bracket({ tournament }: { tournament: Tournament }) {
         if (series.length === 0) return null;
         const finished = series.filter(isSeriesComplete).length;
         const draftTitle = stage === 'group' ? t.viewer.groupDraw : t.stages[title];
-        const draftAside = stage === 'semi' ? t.viewer.semisDraft : t.viewer.notStartedYet;
         return (
           <Section
             key={stage}
             title={isDraft ? draftTitle : t.stages[title]}
-            aside={isDraft ? draftAside : t.viewer.finishedOf(finished, series.length)}
+            aside={isDraft ? t.viewer.notStartedYet : t.viewer.finishedOf(finished, series.length)}
             icon={<Seal text={seal} />}
           >
             <div className='series-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
@@ -109,7 +104,7 @@ export function ViewerApp() {
   const { tournament, status, updatedAt } = useTournamentFeed();
   const now = useNow();
   const nameOf = tournament ? nameLookup(tournament) : (playerId: string) => playerId;
-  const champion = tournament ? championOf(tournament) : undefined;
+  const standings = tournament ? finalStandings(tournament) : undefined;
 
   return (
     <>
@@ -150,7 +145,7 @@ export function ViewerApp() {
               <p className='paper px-5 py-4 text-center text-muted'>{t.viewer.notStarted}</p>
             )}
 
-            {tournament && champion && <ChampionBanner name={nameOf(champion)} />}
+            {tournament && standings && <ChampionBanner standings={standings} nameOf={nameOf} />}
             {tournament && <NowPlaying tournament={tournament} nameOf={nameOf} now={now} />}
             {tournament && <QualificationPanel tournament={tournament} nameOf={nameOf} />}
             {tournament && <Bracket tournament={tournament} />}

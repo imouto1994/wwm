@@ -62,20 +62,24 @@ function Recorded({ recordedAt, count, onClear, children }: { recordedAt: string
   );
 }
 
-/** "Who wins?": the three players as answers. */
+/** "Who wins?" (in the survival game, "who goes out?"): the three players as answers. */
 function WinnerPoll({ host, tournament, series }: PollPanelProps) {
   const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   const shares = voteShares(series);
   const [jsonText, setJsonText] = useState('');
+  const isSurvival = series.stage === 'survival';
 
   const parsed = jsonText.trim() ? parseVotesJson(jsonText) : undefined;
   const matched = parsed?.ok ? matchVotes(series, tournament.displayNames, parsed.value) : undefined;
 
   return (
     <section className='flex flex-col gap-3'>
-      <h4 className='font-semibold text-fg'>{t.poll.winnerTitle}</h4>
-      <Prompt question={t.poll.winnerQuestion(t.seriesName(series))} answers={series.playerIds.map(nameOf)} />
+      <h4 className='font-semibold text-fg'>{isSurvival ? t.poll.outTitle : t.poll.winnerTitle}</h4>
+      <Prompt
+        question={isSurvival ? t.poll.outQuestion(t.seriesName(series)) : t.poll.winnerQuestion(t.seriesName(series))}
+        answers={series.playerIds.map(nameOf)}
+      />
 
       {series.poll && (
         <Recorded
@@ -113,7 +117,7 @@ function WinnerPoll({ host, tournament, series }: PollPanelProps) {
 
 const PICKS: GamesPick[] = ['over', 'under'];
 
-const STAGE_OF_SERIES = { group: 'groups', semi: 'semis', final: 'final' } as const;
+const STAGE_OF_SERIES = { group: 'groups', survival: 'survival', semi: 'semis', final: 'final' } as const;
 
 /** "Over or under N games?": the line is fixed per phase; answers are read as over/under in either language. */
 function GamesPollSection({ host, series }: Omit<PollPanelProps, 'tournament'>) {

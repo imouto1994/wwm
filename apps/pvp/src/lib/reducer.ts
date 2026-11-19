@@ -4,7 +4,16 @@ import { SUPPORTED_COUNTS, WINS_NEEDED, formatFor, isSupportedCount } from './fo
 import type { Translatable } from './i18n.js';
 import { MAX_DISPLAY_NAME, MAX_DISPLAY_NAMES, isDiscordUsername, nameLookup, normalizeUsername } from './names.js';
 import { gamesLineOf, hasGamesPrediction, normalizeAnswer } from './polls.js';
-import { groupSeries, groupStageOutcome, pendingTies, semifinalGroups, semifinalSelection, semifinalSeriesFrom } from './qualification.js';
+import {
+  groupSeries,
+  groupStageOutcome,
+  pendingTies,
+  semifinalGroups,
+  semifinalSelection,
+  semifinalSeriesFrom,
+  survivalPlan,
+  survivalSeriesFrom,
+} from './qualification.js';
 import { compareRecords } from './ranking.js';
 import { type PlayerRecord, isSeriesComplete, isValidPlacement, seriesRecords, seriesWinner } from './series.js';
 
@@ -40,7 +49,7 @@ export type Action =
   | { type: 'clearOverride'; seriesId: string }
   | { type: 'replacePlayer'; seriesId: string; outId: PlayerId; inId: PlayerId }
   | { type: 'swapPlayers'; firstId: PlayerId; secondId: PlayerId }
-  | { type: 'setSemifinalPicks'; fillIns: PlayerId[]; dropped: PlayerId[] }
+  | { type: 'setSemifinalPicks'; fillIns: PlayerId[] }
   | { type: 'arrangeSemifinals'; firstId: PlayerId; secondId: PlayerId }
   | { type: 'resetSemifinalDraft' }
   | { type: 'recordPoll'; seriesId: string; ballots: Ballot[] }
@@ -48,7 +57,6 @@ export type Action =
   | { type: 'recordGamesPoll'; seriesId: string; ballots: GamesBallot[] }
   | { type: 'clearGamesPoll'; seriesId: string }
   | { type: 'resolveTies' }
-  | { type: 'setLateRule'; enabled: boolean }
   | { type: 'advance' }
   | { type: 'reopenStage' }
   | { type: 'reset' };
@@ -57,13 +65,14 @@ export type Action =
 export const STAGE_SERIES: Record<Stage, SeriesStage | undefined> = {
   setup: undefined,
   groups: 'group',
+  survival: 'survival',
   semis: 'semi',
   final: 'final',
   done: undefined,
 };
 
 export function createEmptyTournament(name: string = DEFAULT_EVENT_NAME): Tournament {
-  return { schemaVersion: 2, version: 0, updatedAt: '', name, players: [], displayNames: {}, stage: 'setup', series: [], lateRule: false, tieDraws: [] };
+  return { schemaVersion: 2, version: 0, updatedAt: '', name, players: [], displayNames: {}, stage: 'setup', series: [], tieDraws: [] };
 }
 
 /** Series the host can play right now. */
@@ -88,6 +97,8 @@ export function nextStage(tournament: Tournament): Stage | undefined {
     case 'setup':
       return 'groups';
     case 'groups':
+      return survivalPlan(tournament) ? 'survival' : 'semis';
+    case 'survival':
       return 'semis';
     case 'semis':
       return 'final';
@@ -187,7 +198,7 @@ function withoutDraft({ semifinalDraft: _cleared, ...tournament }: Tournament): 
  * `advance` starts exactly these groups.
  */
 function arrangeSemifinals(tournament: Tournament, firstId: PlayerId, secondId: PlayerId): ActionResult {
-  const groups = tournament.stage === 'groups' ? semifinalGroups(tournament) : undefined;
+  const groups = tournament.stage === 'groups' || tournament.stage === 'survival' ? semifinalGroups(tournament) : undefined;
   if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
   const firstGroup = groups.findIndex((group) => group.includes(firstId));
   const secondGroup = groups.findIndex((group) => group.includes(secondId));
@@ -239,23 +250,64 @@ function swapPlayers(tournament: Tournament, firstId: PlayerId, secondId: Player
   });
 }
 
-/** Records the host's semifinal picks; partial picks are fine while the host is still choosing. */
-function setSemifinalPicks(tournament: Tournament, fillIns: PlayerId[], dropped: PlayerId[]): ActionResult {
+/**
+ * Puts someone in for a player who can't play, before their series has a game
+ * or a ruling. In a group (setup or group stage) the newcomer is a reserve
+ * from the display names who isn't in the event yet and takes the leaver's
+ * place in the event, so the rest of the draw stands. In the semifinals and
+ * the final it's a participant not playing in that stage (see
+ * replacementCandidates). The survival game takes no replacements.
+ */
+function replacePlayer(tournament: Tournament, seriesId: string, outId: PlayerId, inId: PlayerId): ActionResult {
+  const series = findSeries(tournament, seriesId);
+  if (!series) return fail((t) => t.errors.unknownSeries(seriesId));
+  const inGroupDraw = series.stage === 'group' && tournament.stage === 'setup';
+  if (!inGroupDraw && series.stage !== STAGE_SERIES[tournament.stage]) return fail((t) => t.errors.notCurrentStage(t.seriesName(series)));
+  if (series.stage === 'survival') return fail((t) => t.errors.replaceNotSurvival);
+  if (series.games.length > 0 || series.winnerOverride) return fail((t) => t.errors.replaceStarted(t.seriesName(series)));
+  if (!series.playerIds.includes(outId)) return fail((t) => t.errors.notInSeries);
+
+  const incoming = series.stage === 'group' ? normalizeUsername(inId) : inId;
+  const swapIn = (playerId: PlayerId) => (playerId === outId ? incoming : playerId);
+  const withLineUp = (current: Tournament) =>
+    withSeries(current, series.id, (entry) => ({ ...withoutPolls(entry), playerIds: entry.playerIds.map(swapIn) as [PlayerId, PlayerId, PlayerId] }));
+
+  if (series.stage !== 'group') {
+    if (!tournament.players.includes(incoming)) return fail((t) => t.errors.unknownReplacement);
+    if (playableSeries(tournament).some((current) => current.playerIds.includes(incoming))) {
+      return fail((t) => t.errors.alreadyPlaying(playerName(tournament, incoming)));
+    }
+    return ok(withLineUp(tournament));
+  }
+
+  if (tournament.players.includes(incoming)) return fail((t) => t.errors.reserveAlreadyIn(playerName(tournament, incoming)));
+  if (!isDiscordUsername(incoming)) return fail((t) => t.errors.notUsernames(incoming));
+  if (!Object.keys(tournament.displayNames).includes(incoming)) return fail((t) => t.errors.namesNeededFirst(incoming));
+  // Draws, picks and arrangements left over from undone results may still name the leaver, who is no longer in the event.
+  const { semifinalPicks, semifinalDraft, ...rest } = tournament;
+  return ok(
+    withLineUp({
+      ...rest,
+      players: tournament.players.map(swapIn),
+      tieDraws: tournament.tieDraws.filter((draw) => !draw.order.includes(outId)),
+      ...(semifinalPicks ? { semifinalPicks: { fillIns: semifinalPicks.fillIns.filter((playerId) => playerId !== outId) } } : {}),
+      ...(semifinalDraft && !semifinalDraft.flat().includes(outId) ? { semifinalDraft } : {}),
+    })
+  );
+}
+
+/** Records the host's picks for the empty semifinal spots; partial picks are fine while the host is still choosing. */
+function setSemifinalPicks(tournament: Tournament, fillIns: PlayerId[]): ActionResult {
   if (tournament.stage !== 'groups') return fail((t) => t.errors.picksOnlyInGroups);
   if (!groupStageOutcome(tournament).complete) return fail((t) => t.errors.finishGroupsFirst);
   const selection = semifinalSelection(tournament);
   const uniqueFillIns = [...new Set(fillIns)];
-  const uniqueDropped = [...new Set(dropped)];
   if (uniqueFillIns.length > selection.fillInSpots) {
     return fail((t) => (selection.fillInSpots === 0 ? t.errors.allSpotsFilled : t.errors.tooManyFillIns(selection.fillInSpots)));
   }
-  if (uniqueDropped.length > selection.dropSpots) {
-    return fail((t) => (selection.dropSpots === 0 ? t.errors.noDropNeeded : t.errors.tooManyDrops(selection.dropSpots)));
-  }
   if (uniqueFillIns.some((playerId) => !selection.fillInCandidates.includes(playerId))) return fail((t) => t.errors.fillInNotWinner);
-  if (uniqueDropped.some((playerId) => !selection.dropCandidates.includes(playerId))) return fail((t) => t.errors.dropMustBeWinner);
   // Different picks mean different semifinalists, so any arrangement starts over from the seeding.
-  return ok({ ...withoutDraft(tournament), semifinalPicks: { fillIns: uniqueFillIns, dropped: uniqueDropped } });
+  return ok({ ...withoutDraft(tournament), semifinalPicks: { fillIns: uniqueFillIns } });
 }
 
 /** Results can only change in the stage being played; earlier stages need `reopenStage` first. */
@@ -270,7 +322,7 @@ function playableOrError(tournament: Tournament, seriesId: string): Series | Tra
 function createSemifinals(tournament: Tournament): ActionResult {
   const groups = semifinalGroups(tournament);
   if (!groups) return fail((t) => t.errors.semifinalGroupsNotReady);
-  const semis = semifinalSeriesFrom(groups, tournament.lateRule);
+  const semis = semifinalSeriesFrom(groups);
   return ok({ ...withoutDraft(tournament), stage: 'semis', series: [...tournament.series, ...semis], currentSeriesId: undefined });
 }
 
@@ -280,8 +332,18 @@ function advance(tournament: Tournament): ActionResult {
   if (!isStageComplete(tournament)) return fail((t) => t.errors.finishStageFirst);
 
   if (tournament.stage === 'groups') {
-    const { semifinalists, fillInSpots, dropSpots } = semifinalSelection(tournament);
-    if (!semifinalists) return fail((t) => (dropSpots > 0 ? t.errors.pickDropFirst : t.errors.pickFillInsFirst(fillInSpots)));
+    if (pendingTies(tournament).length > 0) return fail((t) => t.errors.resolveTiesFirst);
+    const plan = survivalPlan(tournament);
+    if (plan) {
+      if (!plan.seats) return fail((t) => t.errors.finishStageFirst);
+      return ok({ ...withoutDraft(tournament), stage: 'survival', series: [...tournament.series, survivalSeriesFrom(plan.seats)], currentSeriesId: undefined });
+    }
+    const { semifinalists, fillInSpots } = semifinalSelection(tournament);
+    if (!semifinalists) return fail((t) => t.errors.pickFillInsFirst(fillInSpots));
+    return createSemifinals(tournament);
+  }
+
+  if (tournament.stage === 'survival') {
     if (pendingTies(tournament).length > 0) return fail((t) => t.errors.resolveTiesFirst);
     return createSemifinals(tournament);
   }
@@ -312,10 +374,13 @@ function reopenStage(tournament: Tournament): ActionResult {
         return fail((t) => t.errors.groupsHaveResults);
       }
       return ok({ ...tournament, stage: 'setup', currentSeriesId: undefined });
+    case 'survival':
+      return ok({ ...tournament, stage: 'groups', series: removeStage('survival'), currentSeriesId: undefined });
     case 'semis': {
-      // Keep the host's arrangement as the draft, so going back to fix a group result doesn't undo it.
+      // Keep the host's arrangement as the draft, so going back to fix a result doesn't undo it.
       const semifinalDraft = tournament.series.filter((series) => series.stage === 'semi').map((series) => series.playerIds);
-      return ok({ ...tournament, stage: 'groups', series: removeStage('semi'), currentSeriesId: undefined, semifinalDraft });
+      const stage = tournament.series.some((series) => series.stage === 'survival') ? 'survival' : 'groups';
+      return ok({ ...tournament, stage, series: removeStage('semi'), currentSeriesId: undefined, semifinalDraft });
     }
     case 'final':
       return ok({ ...tournament, stage: 'semis', series: removeStage('final'), currentSeriesId: undefined });
@@ -430,6 +495,8 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
     case 'overrideWinner': {
       const series = playableOrError(tournament, action.seriesId);
       if (typeof series === 'function') return fail(series);
+      // The survival game is decided by who finishes 3rd, which a winner ruling can't express.
+      if (series.stage === 'survival') return fail((t) => t.errors.survivalNoRuling);
       if (!series.playerIds.includes(action.playerId)) return fail((t) => t.errors.winnerNotInSeries);
       const reason = cleanName(action.reason);
       if (!reason) return fail((t) => t.errors.reasonRequired);
@@ -444,29 +511,14 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
       return ok(withSeries(tournament, series.id, ({ winnerOverride: _cleared, ...rest }) => rest));
     }
 
-    case 'replacePlayer': {
-      const series = playableOrError(tournament, action.seriesId);
-      if (typeof series === 'function') return fail(series);
-      if (series.stage !== 'semi' && series.stage !== 'final') return fail((t) => t.errors.replaceOnlyKnockout);
-      if (series.games.length > 0 || series.winnerOverride) return fail((t) => t.errors.replaceStarted(t.seriesName(series)));
-      if (!series.playerIds.includes(action.outId)) return fail((t) => t.errors.notInSeries);
-      if (!tournament.players.includes(action.inId)) return fail((t) => t.errors.unknownReplacement);
-      if (playableSeries(tournament).some((current) => current.playerIds.includes(action.inId))) {
-        return fail((t) => t.errors.alreadyPlaying(playerName(tournament, action.inId)));
-      }
-      return ok(
-        withSeries(tournament, series.id, (current) => ({
-          ...withoutPolls(current),
-          playerIds: current.playerIds.map((playerId) => (playerId === action.outId ? action.inId : playerId)) as [PlayerId, PlayerId, PlayerId],
-        }))
-      );
-    }
+    case 'replacePlayer':
+      return replacePlayer(tournament, action.seriesId, action.outId, action.inId);
 
     case 'swapPlayers':
       return swapPlayers(tournament, action.firstId, action.secondId);
 
     case 'setSemifinalPicks':
-      return setSemifinalPicks(tournament, action.fillIns, action.dropped);
+      return setSemifinalPicks(tournament, action.fillIns);
 
     case 'arrangeSemifinals':
       return arrangeSemifinals(tournament, action.firstId, action.secondId);
@@ -496,18 +548,6 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
     case 'resolveTies':
       return resolveTies(tournament, context);
 
-    case 'setLateRule': {
-      const semis = tournament.series.filter((series) => series.stage === 'semi');
-      if (semis.some((series) => series.games.length > 0 || series.winnerOverride)) return fail((t) => t.errors.semisStarted);
-      if (tournament.stage === 'final' || tournament.stage === 'done') return fail((t) => t.errors.semisOver);
-      const winsNeeded = action.enabled ? 1 : 2;
-      return ok({
-        ...tournament,
-        lateRule: action.enabled,
-        series: tournament.series.map((series) => (series.stage === 'semi' ? { ...series, winsNeeded } : series)),
-      });
-    }
-
     case 'advance':
       return advance(tournament);
 
@@ -526,13 +566,21 @@ export function applyAction(tournament: Tournament, action: Action, context: Act
 }
 
 /**
- * Candidates to replace a withdrawn semifinalist or finalist, best first:
- * for the semifinals, the best group-stage records among non-semifinalists;
- * for the final, the other players of that finalist's semifinal.
+ * Candidates to replace a player who can't play. For a group, reserves: people
+ * in the display names who aren't in the event, by name. Otherwise best
+ * first: for the semifinals, the best group-stage records among
+ * non-semifinalists; for the final, the other players of that finalist's semifinal.
  */
 export function replacementCandidates(tournament: Tournament, seriesId: string, outId: PlayerId): PlayerId[] {
   const series = findSeries(tournament, seriesId);
   if (!series) return [];
+  if (series.stage === 'group') {
+    const nameOf = nameLookup(tournament);
+    const inEvent = new Set(tournament.players);
+    return Object.keys(tournament.displayNames)
+      .filter((username) => !inEvent.has(username) && isDiscordUsername(username))
+      .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  }
   const playing = new Set(playableSeries(tournament).flatMap((current) => current.playerIds));
   const byRecord = (records: Map<PlayerId, PlayerRecord>, playerIds: PlayerId[]) =>
     playerIds.filter((playerId) => !playing.has(playerId)).sort((a, b) => compareRecords(records.get(a) ?? emptyRecord(a), records.get(b) ?? emptyRecord(b)));

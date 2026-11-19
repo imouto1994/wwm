@@ -15,12 +15,12 @@ export interface EventFormat {
   groups: number;
   /** Semifinal spots the group winners leave empty, filled by host picks (21 → 2, 24 → 1). */
   fillInSpots: number;
-  /** Group winners beyond the 9 semifinal spots, left out by host pick (30 → 1). */
+  /** Group winners beyond the 9 semifinal spots (30 → 1); the survival game decides who goes out. */
   dropSpots: number;
 }
 
-/** Game wins needed to take a series in each phase: first to 2, except a first-to-3 grand final. */
-export const WINS_NEEDED: Record<SeriesStage, 2 | 3> = { group: 2, semi: 2, final: 3 };
+/** Game wins needed to take a series in each phase: first to 2, a single game for the survival game, first to 3 for the grand final. */
+export const WINS_NEEDED: Record<SeriesStage, 1 | 2 | 3> = { group: 2, survival: 1, semi: 2, final: 3 };
 
 /**
  * Fixed over/under lines for the "how many games?" prediction, chosen so the
@@ -35,7 +35,8 @@ export const WINS_NEEDED: Record<SeriesStage, 2 | 3> = { group: 2, semi: 2, fina
  * lines also mean no vote is ever voided by a game count landing on the line;
  * whole numbers (3, or 5 for the final) would void 27-44% of votes that way.
  */
-export const GAMES_LINES: Record<SeriesStage, number> = { group: 2.5, semi: 2.5, final: 4.5 };
+// The survival game is always one game, so it has no over/under poll (see hasGamesPrediction); its entry only completes the record.
+export const GAMES_LINES: Record<SeriesStage, number> = { group: 2.5, survival: 0.5, semi: 2.5, final: 4.5 };
 
 export function isValidGamesLine(line: unknown): line is number {
   return typeof line === 'number' && Number.isFinite(line) && line >= 0.5 && line <= 10 && Number.isInteger(line * 2);

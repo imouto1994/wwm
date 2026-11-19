@@ -10,7 +10,7 @@ import { groupSeries } from '@/lib/qualification';
 import { cleanName } from '@/lib/reducer';
 import type { Tournament } from '@/types/tournament';
 import { Play, Shuffle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface SetupPanelProps {
   host: HostController;
@@ -22,7 +22,10 @@ export function SetupPanel({ host, tournament }: SetupPanelProps) {
   const { t } = useI18n();
   const nameOf = nameLookup(tournament);
   const [eventName, setEventName] = useState(tournament.name);
-  const [usernamesText, setUsernamesText] = useState(tournament.players.join('\n'));
+  const savedUsernames = tournament.players.join('\n');
+  const [usernamesText, setUsernamesText] = useState(savedUsernames);
+  // A reserve swap changes the saved list; a stale box would offer to save the old list over it and wipe the draw.
+  useEffect(() => setUsernamesText(savedUsernames), [savedUsernames]);
   const usernames = usernamesText.split('\n').map(normalizeUsername).filter(Boolean);
   const unchanged = usernames.length === tournament.players.length && usernames.every((username, index) => username === tournament.players[index]);
   const named = new Set(Object.keys(tournament.displayNames));

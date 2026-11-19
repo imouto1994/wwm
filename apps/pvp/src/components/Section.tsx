@@ -4,14 +4,19 @@ interface SectionProps {
   title: string;
   /** Short context shown next to the title, such as "4 of 9 finished". */
   aside?: ReactNode;
+  /** Shown before the title; the viewer page puts a seal stamp here. */
+  icon?: ReactNode;
   children: ReactNode;
 }
 
-export function Section({ title, aside, children }: SectionProps) {
+export function Section({ title, aside, icon, children }: SectionProps) {
   return (
     <section className='flex flex-col gap-3'>
       <div className='flex flex-wrap items-baseline justify-between gap-2'>
-        <h2 className='text-sm font-semibold uppercase tracking-wide text-muted'>{title}</h2>
+        <h2 className='section-title flex items-center gap-2.5 text-sm font-semibold uppercase tracking-wide text-muted'>
+          {icon}
+          {title}
+        </h2>
         {aside && <div className='text-xs text-muted'>{aside}</div>}
       </div>
       {children}

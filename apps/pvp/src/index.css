@@ -1,10 +1,13 @@
 @import "tailwindcss";
 
 /*
- * WWM Guild PvP Tournament - reuses the wuxia dark theme from the other apps
- * in the monorepo (see apps/speedrun/src/index.css) so they feel like one
- * family. `green` marks qualified players and live states; `gold` stays the
- * accent for winners and primary actions.
+ * WWM Guild PvP Tournament. The host console reuses the wuxia dark theme from
+ * the other apps in the monorepo (see apps/speedrun/src/index.css) so they feel
+ * like one family. `green` marks qualified players and live states; `gold`
+ * stays the accent for winners and primary actions.
+ *
+ * The viewer page swaps in a light "rice paper and ink" theme: see
+ * `html.wuxia` below.
  */
 @theme {
   --color-bg: #0f0f0f;
@@ -18,6 +21,14 @@
   --color-border: #2a2a3e;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Alegreya and Water Brush both cover Vietnamese; they load from Google Fonts in index.html. */
+  --font-serif: "Alegreya", Georgia, "Times New Roman", serif;
+  --font-brush: "Water Brush", "Alegreya", cursive;
+  --font-seal: "Ma Shan Zheng", "STKaiti", "KaiTi", "Kaiti SC", serif;
+
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-sheet-up: sheet-up 0.45s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  --animate-stamp: stamp 0.7s cubic-bezier(0.2, 1.5, 0.4, 1) both;
 }
 
 @layer base {
@@ -31,5 +42,439 @@
     min-height: 100vh;
     background-color: var(--color-bg);
     color: var(--color-fg);
+  }
+}
+
+/*
+ * Viewer theme. index.html puts `wuxia` on <html> for every path except /host
+ * before React loads. Tailwind's colours are CSS variables, so redefining them
+ * here re-themes the shared components (series cards, sections, the language
+ * switch) on the viewer page only. These rules are unlayered on purpose: they
+ * must win over Tailwind's utility classes on those shared components.
+ */
+html.wuxia {
+  --color-bg: #f3ead6;
+  --color-surface: #fbf6ea;
+  --color-surface-hover: #f1e6cc;
+  --color-fg: #2a221c;
+  --color-muted: #7a6754;
+  --color-gold: #9c650e;
+  --color-red: #b3362b;
+  --color-green: #2e7a57;
+  --color-border: #dac69b;
+  --paper-shadow: inset 0 0 0 3px rgb(251 246 234 / 0.9), inset 0 0 0 4px rgb(156 101 14 / 0.2), 0 1px 0 rgb(255 255 255 / 0.6), 0 10px 24px -14px
+    rgb(70 45 20 / 0.45);
+
+  color-scheme: light;
+  font-family: var(--font-serif);
+  font-variant-numeric: lining-nums;
+  background-color: var(--color-bg);
+  /* Light falling from the top, a darker edge, and a faint paper grain. */
+  background-image: radial-gradient(ellipse at 50% -10%, rgb(255 251 240 / 0.95), transparent 60%),
+    radial-gradient(ellipse at 50% 120%, rgb(176 140 86 / 0.25), transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.32 0 0 0 0 0.2 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+
+html.wuxia body {
+  background: transparent;
+}
+
+.wuxia .paper,
+.wuxia .series-card {
+  background: linear-gradient(180deg, #fffcf5, #faf2e2);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  box-shadow: var(--paper-shadow);
+}
+
+/* Section headings: inked serif with a cinnabar brush stroke drawn underneath. */
+.wuxia .section-title {
+  position: relative;
+  padding-bottom: 0.35rem;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--color-fg);
+}
+.wuxia .section-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 3.5rem;
+  height: 0.4rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'%3E%3Cpath d='M2 7 C 20 2, 45 10, 70 5 S 95 4, 98 6' stroke='%23b3362b' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat center / 100% 100%;
+  transform-origin: left;
+  animation: brush-sweep 0.9s 0.2s cubic-bezier(0.3, 0.8, 0.3, 1) backwards;
+}
+
+/* Decorative seal stamps (aria-hidden), see components/viewer/Seal.tsx. */
+.seal {
+  display: inline-block;
+  flex-shrink: 0;
+  font-family: var(--font-seal);
+  line-height: 1;
+  text-align: center;
+  color: #fff6ea;
+  background: var(--color-red);
+  border-radius: 0.3rem;
+  box-shadow: inset 0 0 0 2px rgb(255 246 234 / 0.35), 0 2px 6px -2px rgb(110 30 20 / 0.5);
+  transform: rotate(-5deg);
+}
+.seal-sm {
+  width: 1.65rem;
+  height: 1.65rem;
+  padding-top: 0.28rem;
+  font-size: 1.1rem;
+}
+/* In vertical text the line height is the column width, so it's set to fill the seal and keep the glyphs centred. */
+.seal-md {
+  writing-mode: vertical-rl;
+  width: 1.85rem;
+  height: 2.6rem;
+  padding: 0.22rem 0;
+  font-size: 1.02rem;
+  line-height: 1.85rem;
+}
+.seal-lg {
+  writing-mode: vertical-rl;
+  width: 4.6rem;
+  height: 4.6rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 1.7rem;
+  line-height: 1.9rem;
+}
+.seal-ink {
+  background: #2a221c;
+}
+.seal-ochre {
+  background: #9c650e;
+}
+
+/* Series cards on the viewer page: lift on hover, coins for placings, ink drops for wins. */
+.wuxia .series-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.wuxia .series-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--paper-shadow), 0 16px 28px -16px rgb(70 45 20 / 0.55);
+}
+.wuxia .series-card[data-live] {
+  position: relative;
+  border-color: rgb(179 54 43 / 0.55);
+  animation: live-glow 2.6s ease-in-out infinite;
+}
+.wuxia .series-card[data-live]::after {
+  content: "战";
+  position: absolute;
+  top: -0.8rem;
+  right: -0.6rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding-top: 0.38rem;
+  font-family: var(--font-seal);
+  font-size: 1.3rem;
+  line-height: 1;
+  text-align: center;
+  color: #fff6ea;
+  background: var(--color-red);
+  border-radius: 0.35rem;
+  box-shadow: inset 0 0 0 2px rgb(255 246 234 / 0.35), 0 3px 8px -2px rgb(110 30 20 / 0.55);
+  animation: stamp 0.7s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  --stamp-rotate: 8deg;
+}
+.wuxia .series-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.wuxia .place-chip {
+  border-radius: 9999px;
+  font-family: var(--font-serif);
+  font-weight: 800;
+  animation: stamp 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  --stamp-rotate: 0deg;
+}
+.wuxia .place-chip[data-place="0"] {
+  color: #fff8e6;
+  background: radial-gradient(circle at 32% 30%, #f0c868, #a8700f 70%);
+  box-shadow: 0 1px 2px rgb(110 70 10 / 0.45);
+}
+.wuxia .place-chip[data-place="1"] {
+  color: #2a221c;
+  background: radial-gradient(circle at 32% 30%, #ffffff, #c9c2b4 75%);
+  box-shadow: 0 1px 2px rgb(80 70 50 / 0.35);
+}
+.wuxia .win-pip {
+  width: 0.6rem;
+  height: 0.6rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+}
+.wuxia .win-pip[data-filled] {
+  background: radial-gradient(circle at 35% 35%, #5a4a3e, #1f1a16 70%);
+  border-color: transparent;
+  animation: ink-drop 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.wuxia .series-card .lucide-crown {
+  animation: crown-bob 2.8s ease-in-out infinite;
+}
+
+/* Champion: a gilded scroll with a seal, stamped onto the page. */
+.wuxia .champion-banner {
+  position: relative;
+  justify-content: center;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 236 180 / 0.65) 45%, transparent 60%) no-repeat, linear-gradient(180deg, #fff8e6, #f6e6bf);
+  background-size: 250% 100%, 100% 100%;
+  border: 2px solid #c79a3a;
+  border-radius: 0.9rem;
+  box-shadow: inset 0 0 0 4px #fff8e6, inset 0 0 0 5px rgb(156 101 14 / 0.45), 0 18px 40px -20px rgb(110 70 10 / 0.6);
+  animation: champion-in 0.9s cubic-bezier(0.2, 1.2, 0.4, 1) both, gold-sheen 4.5s 1s ease-in-out infinite;
+}
+.wuxia .champion-banner::before {
+  content: "冠军";
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  writing-mode: vertical-rl;
+  width: 2rem;
+  height: 3rem;
+  padding: 0.3rem 0;
+  font-family: var(--font-seal);
+  font-size: 1.15rem;
+  line-height: 2rem;
+  text-align: center;
+  color: #fff6ea;
+  background: var(--color-red);
+  border-radius: 0.3rem;
+  animation: stamp 0.7s 0.6s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  --stamp-rotate: 6deg;
+}
+.wuxia .champion-name {
+  font-family: var(--font-brush);
+  font-size: clamp(2.6rem, 7vw, 4rem);
+  font-weight: 400;
+  line-height: 1.1;
+  color: #8a5a0c;
+}
+
+/* Rice-paper scroll with wooden rods, for the prediction leaderboard. */
+.scroll-board {
+  position: relative;
+  padding: 0.55rem 0;
+}
+.scroll-board::before,
+.scroll-board::after {
+  content: "";
+  position: absolute;
+  left: -0.45rem;
+  right: -0.45rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #8b5a2b, #5a3415 60%, #3e230d);
+  box-shadow: 0 2px 4px rgb(60 35 10 / 0.4);
+  z-index: 1;
+}
+.scroll-board::before {
+  top: 0;
+}
+.wuxia .scroll-board > .paper {
+  border-radius: 0.2rem;
+}
+.scroll-board::after {
+  bottom: 0;
+}
+
+/* Page entrance and repeated motion. */
+.wuxia .viewer-stack > *,
+.wuxia .series-grid > *,
+.wuxia .feed-item {
+  animation: fade-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.wuxia .viewer-stack > :nth-child(2),
+.wuxia .series-grid > :nth-child(2),
+.wuxia .feed-item:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.wuxia .viewer-stack > :nth-child(3),
+.wuxia .series-grid > :nth-child(3),
+.wuxia .feed-item:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.wuxia .viewer-stack > :nth-child(4),
+.wuxia .series-grid > :nth-child(4),
+.wuxia .feed-item:nth-child(4) {
+  animation-delay: 0.21s;
+}
+.wuxia .viewer-stack > :nth-child(5),
+.wuxia .series-grid > :nth-child(5),
+.wuxia .feed-item:nth-child(5) {
+  animation-delay: 0.28s;
+}
+.wuxia .viewer-stack > :nth-child(n + 6),
+.wuxia .series-grid > :nth-child(n + 6),
+.wuxia .feed-item:nth-child(n + 6) {
+  animation-delay: 0.35s;
+}
+
+.brush-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1.3s 0.35s cubic-bezier(0.4, 0.1, 0.2, 1) forwards;
+}
+
+.mist {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, rgb(255 253 246 / 0.85), transparent 70%);
+  filter: blur(8px);
+  animation: drift var(--duration, 60s) ease-in-out infinite alternate;
+}
+
+.petal {
+  position: absolute;
+  top: -5vh;
+  left: var(--x);
+  animation: petal-fall var(--duration) linear var(--delay) infinite;
+}
+.petal > span {
+  display: block;
+  width: var(--size, 0.7rem);
+  height: calc(var(--size, 0.7rem) * 0.8);
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, #f6c9c4, #e08d8a);
+  opacity: 0.75;
+  animation: petal-sway calc(var(--duration) / 4) ease-in-out infinite alternate;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.8) rotate(var(--stamp-rotate, -5deg));
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.92) rotate(var(--stamp-rotate, -5deg));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(var(--stamp-rotate, -5deg));
+  }
+}
+@keyframes ink-drop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.4);
+  }
+}
+@keyframes brush-sweep {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes live-glow {
+  0%,
+  100% {
+    box-shadow: var(--paper-shadow), 0 0 0 0 rgb(179 54 43 / 0);
+  }
+  50% {
+    box-shadow: var(--paper-shadow), 0 0 0 6px rgb(179 54 43 / 0.14), 0 0 26px rgb(179 54 43 / 0.22);
+  }
+}
+@keyframes crown-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-8deg);
+  }
+}
+@keyframes champion-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+@keyframes gold-sheen {
+  0%,
+  60% {
+    background-position: 150% 0, 0 0;
+  }
+  100% {
+    background-position: -50% 0, 0 0;
+  }
+}
+@keyframes drift {
+  from {
+    transform: translateX(-6vw);
+  }
+  to {
+    transform: translateX(6vw);
+  }
+}
+@keyframes sun-float {
+  50% {
+    transform: translateY(-12px);
+  }
+}
+@keyframes petal-fall {
+  from {
+    transform: translateY(0) rotate(0);
+  }
+  to {
+    transform: translateY(112vh) rotate(540deg);
+  }
+}
+@keyframes petal-sway {
+  from {
+    transform: translateX(-24px);
+  }
+  to {
+    transform: translateX(24px);
+  }
+}
+
+/* Motion is decoration only; respect the reduced-motion setting everywhere on the viewer page. */
+@media (prefers-reduced-motion: reduce) {
+  .wuxia *,
+  .wuxia *::before,
+  .wuxia *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .wuxia .brush-draw {
+    stroke-dashoffset: 0;
+  }
+  .wuxia .petal {
+    display: none;
   }
 }

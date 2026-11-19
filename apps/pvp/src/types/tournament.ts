@@ -22,7 +22,8 @@ export interface Game {
   savedAt: string;
 }
 
-export type SeriesStage = 'group' | 'semi' | 'final';
+/** `survival` is the 30-player survival game: one game between the three weakest group winners, 3rd place is out. */
+export type SeriesStage = 'group' | 'survival' | 'semi' | 'final';
 
 /** One Discord member's prediction, imported from the EasyPoll votes JSON; `username` is lowercase and without "@". */
 export interface Ballot {
@@ -31,9 +32,10 @@ export interface Ballot {
 }
 
 /**
- * EasyPoll result for "who wins this series?", one ballot per voter so every
- * vote feeds the prediction leaderboard; vote counts are derived from the
- * ballots. Predictions never affect the bracket.
+ * EasyPoll result for "who wins this series?" (in the survival game: "who
+ * goes out?"), one ballot per voter so every vote feeds the prediction
+ * leaderboard; vote counts are derived from the ballots. Predictions never
+ * affect the bracket.
  */
 export interface Poll {
   ballots: Ballot[];
@@ -63,7 +65,7 @@ export interface Series {
   /** English name ("Group 3"), kept in the document; screens show the localized name from `id` and `stage` instead. */
   label: string;
   playerIds: [PlayerId, PlayerId, PlayerId];
-  /** 2 = first to 2 wins (groups, semifinals); 3 = first to 3 (grand final); 1 = a single match (late-running semifinals). */
+  /** 2 = first to 2 wins (groups, semifinals); 3 = first to 3 (grand final); 1 = a single match (the survival game). */
   winsNeeded: 1 | 2 | 3;
   games: Game[];
   /** Set when the host taps Start; marks the series as live for viewers. */
@@ -75,18 +77,17 @@ export interface Series {
   gamesPoll?: GamesPoll;
 }
 
-export type Stage = 'setup' | 'groups' | 'semis' | 'final' | 'done';
+/** `survival` only happens at 30 players, between the group stage and the semifinals. */
+export type Stage = 'setup' | 'groups' | 'survival' | 'semis' | 'final' | 'done';
 
 /**
- * The host's say in who reaches the 9 semifinal spots when the group winners
- * don't fill them exactly: 21 and 24 players leave spots empty, 30 has a
- * winner too many. At 27 players both lists stay empty.
+ * The host's say in who takes the semifinal spots the group winners leave
+ * empty (2 at 21 players, 1 at 24). At 30 players there is a winner too many
+ * instead, and the survival game decides who goes out, not the host.
  */
 export interface SemifinalPicks {
-  /** Players who didn't win their group but take an empty spot (2 at 21 players, 1 at 24). */
+  /** Players who didn't win their group but take an empty spot. */
   fillIns: PlayerId[];
-  /** Group winners left out so only 9 go through (1 at 30 players). */
-  dropped: PlayerId[];
 }
 
 /**
@@ -120,10 +121,8 @@ export interface Tournament {
   /** Every series created so far, in play order. */
   series: Series[];
   currentSeriesId?: string;
-  /** Late-running rule: semifinals are a single match each. */
-  lateRule: boolean;
   tieDraws: TieDraw[];
-  /** Set during the group stage at 21, 24 and 30 players; see SemifinalPicks. */
+  /** Set at the end of the group stage at 21 and 24 players; see SemifinalPicks. */
   semifinalPicks?: SemifinalPicks;
   /**
    * The host's arrangement of the semifinal groups before they start. Absent

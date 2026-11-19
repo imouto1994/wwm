@@ -2,7 +2,7 @@ import { Button } from '@/components/Button';
 import type { HostController } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import { nameLookup } from '@/lib/names';
-import { seriesWinner, seriesWins } from '@/lib/series';
+import { seriesWinner, seriesWins, survivalLoser } from '@/lib/series';
 import type { Placement, PlayerId, Series, Tournament } from '@/types/tournament';
 import { Crown, Play, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -23,6 +23,8 @@ export function GameEntry({ host, tournament, series }: GameEntryProps) {
   const [picks, setPicks] = useState<PlayerId[]>([]);
   const nameOf = nameLookup(tournament);
   const winner = seriesWinner(series);
+  // The survival game's result is who went out, not who won.
+  const out = survivalLoser(series);
   const wins = seriesWins(series);
   const isLive = tournament.currentSeriesId === series.id;
   const seriesName = t.seriesName(series);
@@ -61,7 +63,9 @@ export function GameEntry({ host, tournament, series }: GameEntryProps) {
         {isLive && !winner && <span className='text-xs text-green'>{t.entry.liveForViewers}</span>}
       </div>
 
-      {winner ? (
+      {winner && out ? (
+        <p className='text-red'>{t.gate.survivalOut(nameOf(out))}</p>
+      ) : winner ? (
         <p className='flex items-center gap-2 text-gold'>
           <Crown size={16} /> {t.entry.winsSeries(nameOf(winner), seriesName)}
           {series.winnerOverride && <span className='text-xs text-muted'>{t.entry.ruling(series.winnerOverride.reason)}</span>}

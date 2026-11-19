@@ -2,10 +2,10 @@ import type { Ballot, GamesBallot, GamesPick, PlayerId, Series, Tournament } fro
 import { GAMES_LINES } from './format.js';
 import type { Translatable } from './i18n.js';
 import { nameLookup, normalizeUsername } from './names.js';
-import { isSeriesComplete, seriesWinner } from './series.js';
+import { isSeriesComplete, seriesWinner, survivalLoser } from './series.js';
 
 // Discord predictions. For every series, members vote in up to two EasyPolls:
-// who wins, and (except single matches) over or under a fixed line on how many
+// who wins (in the survival game: who goes out), and (except single matches) over or under a fixed line on how many
 // games it takes. The host always imports the per-voter JSON produced by the
 // EasyPoll converter, so every vote feeds the prediction leaderboard and the
 // vote counts are derived from those ballots. Predictions are display-only and
@@ -158,6 +158,14 @@ export function voteShares(series: Series): VoteShare[] | undefined {
   return series.playerIds.map((playerId) => ({ playerId, votes: votes[playerId], percent: Math.round((votes[playerId] / total) * 100) }));
 }
 
+/**
+ * The right answer to a series' player poll: the series winner, except in the
+ * survival game, whose poll asks who goes out (only 3rd place is eliminated).
+ */
+export function pollAnswer(series: Series): PlayerId | undefined {
+  return series.stage === 'survival' ? survivalLoser(series) : seriesWinner(series);
+}
+
 /** The player with the most votes, or undefined when nobody voted or the top is shared. */
 export function crowdFavorite(series: Series): PlayerId | undefined {
   const shares = voteShares(series);
@@ -206,16 +214,16 @@ export function crowdGamesPick(series: Series): GamesPick | undefined {
   return votes.over > votes.under ? 'over' : 'under';
 }
 
-/** How often the crowd favourite went on to win, over finished series with a clear favourite. */
+/** How often the crowd's top pick was right (see pollAnswer), over finished series with a clear top pick. */
 export function crowdRecord(tournament: Tournament): { called: number; decided: number } {
   let called = 0;
   let decided = 0;
   for (const series of tournament.series) {
     const favorite = crowdFavorite(series);
-    const winner = seriesWinner(series);
-    if (!favorite || !winner) continue;
+    const answer = pollAnswer(series);
+    if (!favorite || !answer) continue;
     decided += 1;
-    if (favorite === winner) called += 1;
+    if (favorite === answer) called += 1;
   }
   return { called, decided };
 }
@@ -265,12 +273,12 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
     return entry;
   };
   for (const series of tournament.series) {
-    const winner = seriesWinner(series);
-    if (winner) {
+    const answer = pollAnswer(series);
+    if (answer) {
       for (const ballot of series.poll?.ballots ?? []) {
         const entry = entryFor(ballot.username);
         entry.winnerPicks += 1;
-        if (ballot.playerId === winner) entry.winnerCorrect += 1;
+        if (ballot.playerId === answer) entry.winnerCorrect += 1;
       }
     }
     const outcome = gamesOutcome(series);

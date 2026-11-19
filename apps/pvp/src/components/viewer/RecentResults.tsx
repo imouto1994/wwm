@@ -1,4 +1,5 @@
 import { Section } from '@/components/Section';
+import { Seal } from '@/components/viewer/Seal';
 import { useI18n } from '@/hooks/useI18n';
 import { formatAgo } from '@/lib/i18n';
 import type { PlayerId, Tournament } from '@/types/tournament';
@@ -22,16 +23,16 @@ export function RecentResults({ tournament, nameOf, now }: RecentResultsProps) {
   if (games.length === 0) return null;
 
   return (
-    <Section title={t.viewer.recentResults}>
-      <ul className='flex flex-col divide-y divide-border rounded-lg border border-border bg-surface'>
+    <Section title={t.viewer.recentResults} icon={<Seal text='录' />}>
+      <ul className='paper flex flex-col divide-y divide-dashed divide-border overflow-hidden'>
         {games.map(({ series, game, number }) => (
-          <li key={`${series.id}-${number}`} className='flex items-center justify-between gap-3 px-4 py-2 text-sm'>
+          <li key={`${series.id}-${number}`} className='feed-item flex items-center justify-between gap-3 px-4 py-2.5 text-sm'>
             <span>
               <span className='text-muted'>{t.viewer.gameOf(t.seriesName(series), number)}</span>{' '}
-              <span className='font-semibold text-gold'>{nameOf(game.placement[0])}</span> {t.viewer.won}
+              <span className='font-bold text-gold'>{nameOf(game.placement[0])}</span> {t.viewer.won}
               <span className='text-muted'>{t.viewer.then(nameOf(game.placement[1]), nameOf(game.placement[2]))}</span>
             </span>
-            <span className='shrink-0 text-xs text-muted'>{formatAgo(Date.parse(game.savedAt), now, t)}</span>
+            <span className='shrink-0 text-xs italic text-muted'>{formatAgo(Date.parse(game.savedAt), now, t)}</span>
           </li>
         ))}
       </ul>

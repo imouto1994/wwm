@@ -5,6 +5,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { describeApiError, fetchHistory } from '@/lib/apiClient';
 import { type Translatable, formatClockTime } from '@/lib/i18n';
 import { nameLookup } from '@/lib/names';
+import { groupSeries } from '@/lib/qualification';
 import { playableSeries, replacementCandidates } from '@/lib/reducer';
 import type { Tournament } from '@/types/tournament';
 import { Download, History } from 'lucide-react';
@@ -42,6 +43,8 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const { t, locale } = useI18n();
   const nameOf = nameLookup(tournament);
   const series = playableSeries(tournament);
+  // The survival game is decided by who finishes 3rd, so a winner ruling doesn't apply there.
+  const overridable = series.filter((entry) => entry.stage !== 'survival');
   const [overrideSeriesId, setOverrideSeriesId] = useState('');
   const [overridePlayerId, setOverridePlayerId] = useState('');
   const [reason, setReason] = useState('');
@@ -52,9 +55,14 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const [historyError, setHistoryError] = useState<Translatable>();
   const [resetText, setResetText] = useState('');
 
-  const overrideSeries = series.find((entry) => entry.id === overrideSeriesId);
-  const replaceable = series.filter((entry) => (entry.stage === 'semi' || entry.stage === 'final') && entry.games.length === 0 && !entry.winnerOverride);
+  const overrideSeries = overridable.find((entry) => entry.id === overrideSeriesId);
+  // Groups take a reserve during setup too, so a no-show found after the public draw doesn't force a redraw.
+  const groupsOpen = tournament.stage === 'setup' || tournament.stage === 'groups';
+  const replaceable = (groupsOpen ? groupSeries(tournament) : series.filter((entry) => entry.stage === 'semi' || entry.stage === 'final')).filter(
+    (entry) => entry.games.length === 0 && !entry.winnerOverride
+  );
   const replaceSeries = replaceable.find((entry) => entry.id === replaceSeriesId);
+  const takesReserve = replaceSeries?.stage === 'group';
   const candidates = replaceSeries && outId ? replacementCandidates(tournament, replaceSeries.id, outId) : [];
 
   async function loadHistory() {
@@ -70,7 +78,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
     <details className='rounded-lg border border-border bg-surface p-4'>
       <summary className='cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted'>{t.tools.title}</summary>
       <div className='mt-4 flex flex-col gap-4'>
-        {series.length > 0 && (
+        {overridable.length > 0 && (
           <Tool title={t.tools.overrideTitle} description={t.tools.overrideHelp}>
             <select
               value={overrideSeriesId}
@@ -81,7 +89,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               className={inputClass}
             >
               <option value=''>{t.tools.series}</option>
-              {series.map((entry) => (
+              {overridable.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {t.seriesName(entry)}
                 </option>
@@ -147,16 +155,25 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
               ))}
             </select>
             <select value={inId} onChange={(event) => setInId(event.target.value)} className={inputClass} disabled={candidates.length === 0}>
-              <option value=''>{t.tools.replacement}</option>
+              <option value=''>{takesReserve ? t.tools.reserve : t.tools.replacement}</option>
               {candidates.map((playerId, index) => (
                 <option key={playerId} value={playerId}>
-                  {index === 0 ? t.tools.suggested(nameOf(playerId)) : nameOf(playerId)}
+                  {takesReserve ? `${nameOf(playerId)} (${playerId})` : index === 0 ? t.tools.suggested(nameOf(playerId)) : nameOf(playerId)}
                 </option>
               ))}
             </select>
-            <Button disabled={!inId} onClick={() => host.dispatch({ type: 'replacePlayer', seriesId: replaceSeriesId, outId, inId })}>
+            <Button
+              disabled={!inId}
+              onClick={() => {
+                if (host.dispatch({ type: 'replacePlayer', seriesId: replaceSeriesId, outId, inId })) {
+                  setOutId('');
+                  setInId('');
+                }
+              }}
+            >
               {t.tools.replace}
             </Button>
+            {takesReserve && outId && candidates.length === 0 && <span className='text-sm text-muted'>{t.tools.noReserves}</span>}
           </Tool>
         )}
 

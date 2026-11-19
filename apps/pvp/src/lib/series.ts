@@ -47,6 +47,11 @@ export function isSeriesComplete(series: Series): boolean {
   return seriesWinner(series) !== undefined;
 }
 
+/** The player knocked out by the survival game: 3rd place in its only game. */
+export function survivalLoser(series: Series): PlayerId | undefined {
+  return series.stage === 'survival' ? series.games[0]?.placement[2] : undefined;
+}
+
 /** A placement must list each of the series' three players exactly once. */
 export function isValidPlacement(series: Series, placement: readonly PlayerId[]): placement is Placement {
   if (placement.length !== 3) return false;

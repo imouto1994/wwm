@@ -1,5 +1,6 @@
 import { Section } from '@/components/Section';
 import { SeriesCard } from '@/components/SeriesCard';
+import { Seal } from '@/components/viewer/Seal';
 import { useI18n } from '@/hooks/useI18n';
 import { currentSeriesEtaMinutes } from '@/lib/eta';
 import { playableSeries } from '@/lib/reducer';
@@ -20,15 +21,11 @@ export function NowPlaying({ tournament, nameOf, now }: NowPlayingProps) {
   const eta = current ? currentSeriesEtaMinutes(tournament, now) : undefined;
 
   return (
-    <Section title={t.viewer.nowPlaying}>
-      {current ? (
-        <SeriesCard series={current} nameOf={nameOf} live />
-      ) : (
-        <p className='rounded-lg border border-border bg-surface px-4 py-3 text-sm text-muted'>{t.viewer.waiting}</p>
-      )}
+    <Section title={t.viewer.nowPlaying} icon={<Seal text='战' />}>
+      {current ? <SeriesCard series={current} nameOf={nameOf} live /> : <p className='paper px-4 py-3 text-sm italic text-muted'>{t.viewer.waiting}</p>}
       {onDeck && (
         <p className='text-sm text-muted'>
-          {t.viewer.onDeck} <span className='font-semibold text-fg'>{t.seriesName(onDeck)}</span> ({onDeck.playerIds.map(nameOf).join(', ')})
+          {t.viewer.onDeck} <span className='font-bold text-fg'>{t.seriesName(onDeck)}</span> ({onDeck.playerIds.map(nameOf).join(', ')})
           {eta !== undefined && <> · {t.viewer.inAbout(eta)}</>}
         </p>
       )}

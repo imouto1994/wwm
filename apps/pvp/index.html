@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Nhánh đấu trực tiếp của giải PvP 1v1v1 bang hội Where Winds Meet." />
     <title>Giải PvP Bang Hội WWM</title>
+    <!-- The viewer page uses the light "rice paper and ink" theme; set it before the first paint so it never flashes dark. Mirrors IS_HOST in src/App.tsx. -->
+    <script>
+      if (location.pathname.replace(/\/+$/, '') !== '/host') document.documentElement.classList.add('wuxia');
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&family=Water+Brush&display=swap" />
+    <!-- Brush glyphs for the decorative seals only, subset to exactly these characters. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&text=%E6%AD%A6%E6%9E%97%E5%A4%A7%E4%BC%9A%E6%88%98%E8%B7%AF%E7%BB%84%E5%8D%8A%E5%86%B3%E5%BD%95%E7%8A%B6%E5%85%83%E6%A6%9C%E7%9C%BC%E6%8E%A2%E8%8A%B1%E7%A5%9E%E7%AE%97%E5%86%A0%E5%86%9B%E5%8D%B1&display=swap" />
   </head>
   <body>
     <div id="root"></div>

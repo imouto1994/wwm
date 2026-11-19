@@ -1,7 +1,7 @@
 import { useI18n } from '@/hooks/useI18n';
 import type { Messages } from '@/lib/i18n';
 import { crowdFavorite, crowdGamesPick, gamesLineOf, gamesOutcome, gamesShares, hasGamesPrediction, voteShares } from '@/lib/polls';
-import { isSeriesComplete, seriesWinner, seriesWins } from '@/lib/series';
+import { isSeriesComplete, seriesWinner, seriesWins, survivalLoser } from '@/lib/series';
 import type { PlayerId, Series } from '@/types/tournament';
 import { Crown, Radio } from 'lucide-react';
 
@@ -59,7 +59,10 @@ function GamesLine({ series }: { series: Series }) {
  */
 export function SeriesCard({ series, nameOf, live = false, selected = false, onSelect }: SeriesCardProps) {
   const { t } = useI18n();
-  const winner = seriesWinner(series);
+  const isSurvival = series.stage === 'survival';
+  // The survival game has no champion to crown: 1st and 2nd both go through, only 3rd place is out.
+  const winner = isSurvival ? undefined : seriesWinner(series);
+  const out = survivalLoser(series);
   const wins = seriesWins(series);
   const shares = voteShares(series);
   const favorite = crowdFavorite(series);
@@ -68,7 +71,7 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
   const body = (
     <>
       <div className='flex items-center justify-between gap-2'>
-        <span className='font-semibold text-fg'>{t.seriesName(series)}</span>
+        <span className='series-title font-semibold text-fg'>{t.seriesName(series)}</span>
         <span className={`flex items-center gap-1 text-xs ${status.className}`}>
           {status.isLive && <Radio size={12} />}
           {status.text}
@@ -78,12 +81,14 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
       <ul className='flex flex-col gap-1.5'>
         {series.playerIds.map((playerId, index) => {
           const isWinner = winner === playerId;
+          const isOut = out === playerId;
           const share = shares?.[index];
           return (
             <li key={playerId} className='flex items-center justify-between gap-2 text-sm'>
-              <span className={`flex min-w-0 items-center gap-1.5 ${isWinner ? 'font-semibold text-gold' : winner ? 'text-muted' : 'text-fg'}`}>
+              <span className={`flex min-w-0 items-center gap-1.5 ${isWinner ? 'font-semibold text-gold' : winner || isOut ? 'text-muted' : 'text-fg'}`}>
                 {isWinner && <Crown size={14} className='shrink-0' />}
-                <span className='truncate'>{nameOf(playerId)}</span>
+                <span className={`truncate ${isOut ? 'line-through' : ''}`}>{nameOf(playerId)}</span>
+                {isOut && <span className='shrink-0 text-xs font-semibold text-red'>{t.card.out}</span>}
                 {share && (
                   <span className={`shrink-0 text-xs ${favorite === playerId ? 'text-fg' : 'text-muted'}`} title={t.card.discordVotes(share.votes)}>
                     {share.percent}%
@@ -97,16 +102,25 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
                     <span
                       key={gameIndex}
                       title={t.card.gamePlace(gameIndex + 1, t.common.places[place])}
-                      className={`flex size-5 items-center justify-center rounded text-[11px] font-semibold ${PLACE_STYLES[place]}`}
+                      data-place={place}
+                      className={`place-chip flex size-5 items-center justify-center rounded text-[11px] font-semibold ${PLACE_STYLES[place]}`}
                     >
                       {place + 1}
                     </span>
                   );
                 })}
                 <span className='ml-1 flex gap-0.5' aria-label={t.card.winsOf(wins[index], series.winsNeeded)}>
-                  {Array.from({ length: series.winsNeeded }, (_, pip) => (
-                    <span key={pip} className={`size-2 rounded-full ${pip < wins[index] ? 'bg-gold' : 'bg-border'}`} />
-                  ))}
+                  {Array.from({ length: series.winsNeeded }, (_, pip) => {
+                    const filled = pip < wins[index];
+                    // Keyed by its state so a pip that fills remounts, which replays the viewer's ink-drop animation.
+                    return (
+                      <span
+                        key={`${pip}-${filled}`}
+                        data-filled={filled || undefined}
+                        className={`win-pip size-2 rounded-full ${filled ? 'bg-gold' : 'bg-border'}`}
+                      />
+                    );
+                  })}
                 </span>
               </span>
             </li>
@@ -114,19 +128,28 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
         })}
       </ul>
       <GamesLine series={series} />
+      {isSurvival && (
+        <p className='text-xs text-muted'>
+          {t.card.survivalNote}
+          {shares && ` ${t.card.outShares}`}
+        </p>
+      )}
       {series.winnerOverride && <p className='text-xs text-muted'>{t.card.ruling(series.winnerOverride.reason)}</p>}
     </>
   );
 
-  const frame = `flex w-full flex-col gap-2 rounded-lg border bg-surface p-3 text-left ${
+  // `series-card` and `data-live` are hooks for the viewer page's theme (index.css); the host page ignores them.
+  const frame = `series-card flex w-full flex-col gap-2 rounded-lg border bg-surface p-3 text-left ${
     live ? 'border-green/60' : selected ? 'border-gold' : 'border-border'
   }`;
 
   return onSelect ? (
-    <button type='button' onClick={onSelect} className={`${frame} transition hover:bg-surface-hover`}>
+    <button type='button' onClick={onSelect} data-live={live || undefined} className={`${frame} transition hover:bg-surface-hover`}>
       {body}
     </button>
   ) : (
-    <div className={frame}>{body}</div>
+    <div data-live={live || undefined} className={frame}>
+      {body}
+    </div>
   );
 }

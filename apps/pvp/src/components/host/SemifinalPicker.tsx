@@ -14,10 +14,9 @@ interface SemifinalPickerProps {
 }
 
 /**
- * The host decides who makes up the 9 semifinal spots when the group winners
- * don't fill them exactly: who takes an empty spot (21 and 24 players), or
- * which group winner sits out (30 players). Each tap saves, so viewers see the
- * picks as they're made.
+ * At 21 and 24 players the group winners leave semifinal spots empty, and the
+ * host decides who fills them. Each tap saves, so viewers see the picks as
+ * they're made. (At 30 players the survival game removes the extra winner instead.)
  */
 export function SemifinalPicker({ host, tournament, selection }: SemifinalPickerProps) {
   const { t, locale } = useI18n();
@@ -30,32 +29,25 @@ export function SemifinalPicker({ host, tournament, selection }: SemifinalPicker
     const group = groupOf.get(playerId);
     return group ? t.seriesName(group) : '';
   };
-  const { fillInSpots, dropSpots, fillIns, dropped } = selection;
-  if (fillInSpots === 0 && dropSpots === 0) return null;
-
-  const isFillIn = fillInSpots > 0;
-  const spots = isFillIn ? fillInSpots : dropSpots;
-  const picked = isFillIn ? fillIns : dropped;
-  const candidates = isFillIn ? selection.fillInCandidates : selection.dropCandidates;
+  const { fillInSpots: spots, fillIns: picked, fillInCandidates: candidates } = selection;
+  if (spots === 0) return null;
   const showList = editing || picked.length < spots;
 
   function toggle(playerId: PlayerId) {
     // With one spot, tapping someone else moves the pick instead of needing an untap first.
     const next = picked.includes(playerId) ? picked.filter((id) => id !== playerId) : spots === 1 ? [playerId] : [...picked, playerId];
-    host.dispatch({ type: 'setSemifinalPicks', fillIns: isFillIn ? next : [], dropped: isFillIn ? [] : next });
+    host.dispatch({ type: 'setSemifinalPicks', fillIns: next });
   }
 
   return (
     <div className='flex flex-col gap-2'>
       <p className='text-sm text-fg'>
-        {isFillIn ? t.picker.fillInPrompt(spots) : t.picker.dropPrompt(spots)}
+        {t.picker.fillInPrompt(spots)}
         <span className='ml-2 text-xs text-muted'>{t.picker.pickedCount(picked.length, spots)}</span>
       </p>
       {!showList && (
         <p className='flex flex-wrap items-center gap-2 text-sm'>
-          <span className={isFillIn ? 'font-semibold text-gold' : 'font-semibold text-red'}>
-            {picked.map((playerId) => `${nameOf(playerId)} (${groupName(playerId)})`).join(', ')}
-          </span>
+          <span className='font-semibold text-gold'>{picked.map((playerId) => `${nameOf(playerId)} (${groupName(playerId)})`).join(', ')}</span>
           <button type='button' onClick={() => setEditing(true)} className='text-xs text-muted underline hover:text-fg'>
             {t.picker.change}
           </button>
@@ -63,7 +55,7 @@ export function SemifinalPicker({ host, tournament, selection }: SemifinalPicker
       )}
       {showList && (
         <p className='text-xs text-muted'>
-          {isFillIn ? t.picker.listedFillIn : t.picker.listedDrop}
+          {t.picker.listedFillIn}
           {editing && picked.length === spots && (
             <button type='button' onClick={() => setEditing(false)} className='ml-2 underline hover:text-fg'>
               {t.picker.done}
@@ -82,11 +74,7 @@ export function SemifinalPicker({ host, tournament, selection }: SemifinalPicker
               disabled={full}
               onClick={() => toggle(playerId)}
               className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition disabled:opacity-40 ${
-                isPicked
-                  ? isFillIn
-                    ? 'border-gold bg-gold/10 text-gold'
-                    : 'border-red/60 bg-red/10 text-red'
-                  : 'border-border text-fg enabled:hover:bg-surface-hover'
+                isPicked ? 'border-gold bg-gold/10 text-gold' : 'border-border text-fg enabled:hover:bg-surface-hover'
               }`}
             >
               <span className='flex min-w-0 items-center gap-1.5'>

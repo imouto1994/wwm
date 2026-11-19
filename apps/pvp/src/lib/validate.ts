@@ -21,8 +21,8 @@ import { MAX_DISPLAY_NAME, MAX_DISPLAY_NAMES, normalizeUsername } from './names.
 // rebuilds every object field by field, so unknown keys are dropped and a
 // malformed document can never be saved or rendered.
 
-const STAGES: readonly Stage[] = ['setup', 'groups', 'semis', 'final', 'done'];
-const SERIES_STAGES: readonly SeriesStage[] = ['group', 'semi', 'final'];
+const STAGES: readonly Stage[] = ['setup', 'groups', 'survival', 'semis', 'final', 'done'];
+const SERIES_STAGES: readonly SeriesStage[] = ['group', 'survival', 'semi', 'final'];
 
 class Invalid extends Error {}
 
@@ -126,6 +126,7 @@ function parseSeries(value: unknown, path: string, knownPlayers: ReadonlySet<Pla
   check(isString(value.label), `${path}.label is missing.`);
   check(value.winsNeeded === 1 || value.winsNeeded === 2 || value.winsNeeded === 3, `${path}.winsNeeded must be 1, 2 or 3.`);
   const winsNeeded = value.winsNeeded;
+  check(value.stage !== 'survival' || winsNeeded === 1, `${path} is the survival game, which is a single game.`);
   check(Array.isArray(value.playerIds) && value.playerIds.length === 3, `${path}.playerIds must list three players.`);
   const playerIds = value.playerIds;
   check(
@@ -186,16 +187,17 @@ function parseTieDraw(value: unknown, path: string, knownPlayers: ReadonlySet<Pl
 
 // Only the shape is checked here: whether a pick still fits the results is
 // derived (see semifinalSelection), because undoing a game can change it.
+// Older documents also carry a `dropped` list from when the host picked the
+// winner to leave out at 30 players; the survival game decides that now, so
+// like any unknown key it's dropped.
 function parseSemifinalPicks(value: unknown, knownPlayers: ReadonlySet<PlayerId>): SemifinalPicks {
-  check(isObject(value) && Array.isArray(value.fillIns) && Array.isArray(value.dropped), 'semifinalPicks must have fillIns and dropped lists.');
-  const ids = (list: unknown[], name: string): PlayerId[] => {
-    check(
-      list.every((playerId) => isString(playerId) && knownPlayers.has(playerId)) && new Set(list).size === list.length,
-      `semifinalPicks.${name} must list known players once each.`
-    );
-    return list as PlayerId[];
-  };
-  return { fillIns: ids(value.fillIns, 'fillIns'), dropped: ids(value.dropped, 'dropped') };
+  check(isObject(value) && Array.isArray(value.fillIns), 'semifinalPicks must have a fillIns list.');
+  const fillIns = value.fillIns;
+  check(
+    fillIns.every((playerId) => isString(playerId) && knownPlayers.has(playerId)) && new Set(fillIns).size === fillIns.length,
+    'semifinalPicks.fillIns must list known players once each.'
+  );
+  return { fillIns: fillIns as PlayerId[] };
 }
 
 function parseSemifinalDraft(value: unknown, knownPlayers: ReadonlySet<PlayerId>): [PlayerId, PlayerId, PlayerId][] {
@@ -219,7 +221,8 @@ export function parseTournament(input: unknown): Result<Tournament> {
     check(isString(input.updatedAt), 'updatedAt must be a string.');
     check(isString(input.name) && input.name.length <= 80, 'name must be a short string.');
     check(isString(input.stage) && (STAGES as readonly string[]).includes(input.stage), 'stage is invalid.');
-    check(typeof input.lateRule === 'boolean', 'lateRule must be true or false.');
+    // Documents from when semifinals could be cut to one match still carry `lateRule`; like any unknown key it's
+    // dropped, and their semifinals keep the length they were created with.
 
     const { players, displayNames } =
       input.schemaVersion === 1
@@ -251,7 +254,6 @@ export function parseTournament(input: unknown): Result<Tournament> {
         stage: input.stage as Stage,
         series,
         ...(isString(input.currentSeriesId) ? { currentSeriesId: input.currentSeriesId } : {}),
-        lateRule: input.lateRule,
         tieDraws,
         ...(semifinalPicks ? { semifinalPicks } : {}),
         ...(semifinalDraft ? { semifinalDraft } : {}),

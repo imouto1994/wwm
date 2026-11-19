@@ -270,7 +270,7 @@ Optionally delete the `pvp:preview:*` keys in the Upstash Data Browser and the p
 - After each stage: **Host tools → Download JSON** (your offline backup).
 - If the host page shows **"Not saved"**, tap **Retry**. **Don't reload the host tab** until it says saved; unsaved changes only live in that tab.
 - One scorekeeping device at a time. To switch, **Lock** the old one and open `/host` on the new one. All results are on the server.
-- The run order is in [pvp-app.md §9](pvp-app.md#9-event-day-checklist).
+- The host's step-by-step list is [pvp-host-checklist.md](pvp-host-checklist.md).
 
 ---
 

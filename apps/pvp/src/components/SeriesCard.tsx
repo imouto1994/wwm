@@ -92,7 +92,11 @@ export function SeriesCard({ series, nameOf, live = false, selected = false, onS
                 {isWinner && <Crown size={14} className='shrink-0' />}
                 <span className={`truncate ${isOut ? 'line-through' : ''}`}>{nameOf(playerId)}</span>
                 {isOut && <span className='shrink-0 text-xs font-semibold text-red'>{t.card.out}</span>}
-                {podiumPlace && podiumPlace > 1 && <span className='shrink-0 text-xs font-semibold text-fg'>{t.common.podium[podiumPlace - 1]}</span>}
+                {podiumPlace && podiumPlace > 1 && (
+                  <span data-place={podiumPlace} className='podium-tag shrink-0 text-xs font-semibold text-fg'>
+                    {t.common.podium[podiumPlace - 1]}
+                  </span>
+                )}
                 {share && (
                   <span className={`shrink-0 text-xs ${favorite === playerId ? 'text-fg' : 'text-muted'}`} title={t.card.discordVotes(share.votes)}>
                     {share.percent}%

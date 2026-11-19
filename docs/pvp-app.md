@@ -283,7 +283,7 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 - **Layout**: a brush-script title under a "武林大会" seal, then the bracket in the main column and the prediction leaderboard beside it. On wide screens (≥ 1024 px) the leaderboard is a sticky side column, so it never scrolls away; on phones it docks at the bottom of the screen with the current leader and opens as a sheet.
 - **Bảng Thần Toán / Oracle Ranking** (the prediction leaderboard): a hanging scroll with the crowd's record on both questions and every member ranked by correct picks (winner, over/under and total). The prize places (§2.5: shared by ties, and no more places once three members hold one) wear the imperial exam's seals: 状元 Trạng nguyên for 1st, 榜眼 Bảng nhãn for 2nd, 探花 Thám hoa for 3rd. Everyone else shows their position number. It shows even before the first predicted series finishes, so viewers know where to look.
 - **Now playing**: the live series with each player's game placements and win pips, plus "next series in about N minutes" once there's enough timing data. When nothing is live: "Waiting for the host to start the next series" and the next series "on deck".
-- **Champion banner** (once the final is decided): the champion's name, then the runner-up and 3rd place, or two runners-up when they're level on points (§2.1). The final's card also tags 2nd and 3rd.
+- **Champion banner** (once the final is decided): the champion's gilded scroll, with two plaques below it: silver for the runner-up (亚军 seal) and bronze for 3rd place (季军 seal), or two silver plaques when 2nd and 3rd are level on points (§2.1). The final's card tags 2nd and 3rd with matching silver and bronze pills.
 - **Road to the semifinals** (group stage, and the survival game at 30 players): the qualification rule in plain words for the player count, that the semifinal groups are drawn at random, the group winners, and the host's picks; at 30 players also who plays the survival game (or a note while its last seat waits for a draw) and who it knocked out, struck through among the winners.
 - **Survival game** (30 players): its own bracket section under a 危 seal, shown as a draft as soon as the seats are settled. The card has no crown: it marks the player who finished 3rd as out, explains "1st and 2nd go through, 3rd is out", and its vote shares are predictions for who goes out.
 - **Series cards**: per-game place chips, win pips, crown for the winner, "Live / Finished / Upcoming", the series length ("first to 2", "first to 3" or "one match"), vote shares when a poll was recorded, the over/under line with its vote split and, once finished, the result ("3 ván: ra Trên"), and the reason for any override. The semifinal section only appears once the host starts the semifinals.
@@ -347,7 +347,7 @@ The viewer redefines Tailwind's colour tokens under `html.wuxia`; the host keeps
 | `green`         | `#2e7a57` jade     | `#5fae7b`   | Qualified ("through"), the live dot                        |
 | `border`        | `#dac69b` tan      | `#2a2a3e`   | Frames, dividers (dashed inside paper)                     |
 
-Fixed viewer accents that aren't tokens: seal text `#fff6ea`, ink seals `#2a221c`, ochre seals `#9c650e`, the gold coin (`#f0c868` → `#a8700f`), the silver coin (`#ffffff` → `#c9c2b4`), the champion's gilt (`#c79a3a` frame, `#8a5a0c` name), the scroll's wooden rods (`#8b5a2b` → `#3e230d`) and the plum petals (`#f6c9c4` → `#e08d8a`).
+Fixed viewer accents that aren't tokens: seal text `#fff6ea`, ink seals `#2a221c`, ochre seals `#9c650e`, the gold coin (`#f0c868` → `#a8700f`), the silver coin (`#ffffff` → `#c9c2b4`), the champion's gilt (`#c79a3a` frame, `#8a5a0c` name), the runner-up's silver plaque (`#ffffff` → `#ece7dd`, `#b4ad9f` frame, `#4b4640` name), the 3rd place's bronze plaque (`#fff6ec` → `#f0d9bf`, `#b9794a` frame, `#7a431b` name, `#8f5224` seal and pill), the scroll's wooden rods (`#8b5a2b` → `#3e230d`) and the plum petals (`#f6c9c4` → `#e08d8a`).
 
 #### Typography
 
@@ -378,11 +378,13 @@ All three viewer fonts load from Google Fonts in `index.html`; Ma Shan Zheng is 
   | 神算     | divine reckoning  | Prediction leaderboard                 |
   | 状元 榜眼 探花 | the imperial exam's top three | The leaderboard's prize places 1st–3rd (shared by ties), with tooltips naming the title in the selected language (Trạng nguyên, Bảng nhãn, Thám hoa) |
   | 冠军     | champion          | Champion banner                        |
+  | 亚军     | runner-up         | Silver plaque (2nd place), ink seal    |
+  | 季军     | third place       | Bronze plaque (3rd place), bronze seal |
 
 - **Section headings** (`Section` with `icon={<Seal text='…' />}`): seal, uppercase serif title, and a cinnabar brush stroke that sweeps in underneath.
 - **Header**: the 武林大会 seal stamps in, the event name in brush script, a cinnabar stroke that draws itself, then the stage on a small paper pill and a live dot that pings.
 - **Series cards**: placings as coins (1st gold, 2nd silver, 3rd outlined), wins as ink drops, a gently bobbing crown for the winner, and a lift on hover. The live card gets a cinnabar border, a slow glow and a 战 seal on its corner.
-- **Champion banner**: a gilded scroll with the name in brush script, the runner(s)-up and 3rd place in a line below it, a 冠军 seal and a gold sheen that passes over it.
+- **Champion banner**: a gilded scroll with the name in brush script, a 冠军 seal and a gold sheen that passes over it. Below it sit two plaques side by side (`podium-plaque`, metal picked by `data-place`): a medal, the place, and the name in brush script, silver with a 亚军 seal for 2nd and bronze with a 季军 seal for 3rd. They stamp in one after the other once the scroll has landed, and stay still afterwards: the sheen belongs to the champion alone.
 - **Prediction leaderboard**: a hanging scroll (`scroll-board`, wooden rods top and bottom) around paper. Rank seals mark the prize places; everyone else gets a numbered circle with their position. Rows in 1st place are tinted gold, with the score large and the picks small.
 - **Backdrop** (`InkBackdrop`): a pale cinnabar sun, three ink-wash ridges at 7–14 % opacity, three drifting mist bands and nine falling plum petals. It's fixed behind everything, and its positions are fixed in code (no randomness), so it looks the same on every device.
 - **Layout**: `max-w-7xl`; at 1024 px and up, the main column plus a 21 rem sticky side column for the leaderboard; below that, a bottom dock that opens a sheet, with bottom padding so it never covers content. Sections sit `gap-10` apart; series grids run one, two (`sm`) or three (`xl`) columns.
@@ -398,6 +400,7 @@ All three viewer fonts load from Google Fonts in `index.html`; Ma Shan Zheng is 
 | `live-glow`                       | The live card                                       | 2.6 s, looping                                     | Always while live |
 | `crown-bob`                       | The winner's crown                                  | 2.8 s, looping, small                              | Always  |
 | `champion-in`, `gold-sheen`       | Champion banner                                     | 0.9 s, then a 4.5 s loop                           | Mount   |
+| `champion-in`, `stamp`            | Silver and bronze plaques and their seals           | 0.8 s each, 0.5 s and 0.75 s after the champion; seals 0.45 s later | Mount   |
 | Rank slide, score flash           | Leaderboard rows (`useRankMotion`, Web Animations API) | 600 ms slide, 1.8 s gold flash                  | Rank or score changes |
 | `sheet-up`, `fade-in`             | Phone leaderboard sheet and its backdrop            | 0.45 s, 0.3 s                                      | Open    |
 | `drift`, `petal-fall`, `petal-sway`, `sun-float` | Backdrop                             | 9–90 s, looping                                    | Always  |
@@ -420,7 +423,7 @@ Wuxia flavour goes in names and decoration; instructions and data stay in plain 
 Do:
 
 - Build new viewer UI from the tokens, `paper`, `Seal`, and `Section` with a seal icon.
-- Restyle shared components for the viewer through hook classes under `.wuxia` (`series-card`, `place-chip`, `win-pip`, `champion-banner`, `section-title`).
+- Restyle shared components for the viewer through hook classes under `.wuxia` (`series-card`, `place-chip`, `win-pip`, `champion-banner`, `podium-plaque`, `podium-tag`, `section-title`).
 - Before finishing, check a 390 px phone and a desktop at 1024 px or wider, both languages, reduced motion, and that `/host` looks unchanged.
 
 Don't:

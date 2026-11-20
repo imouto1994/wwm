@@ -19,7 +19,7 @@ The host's step-by-step list for event day. Work from top to bottom and tick eac
 
 - **Polls per series:** two for every group, semifinal and the final (who wins, and over/under games). The survival game has one ("who goes out?").
 - **Over/under lines:** 2.5 games for groups and semifinals, 4.5 for the final. The app shows the line in the question, so just copy it.
-- **Prizes:** the final's champion, runner-up and 3rd place (two runners-up and no 3rd if they're level on points in the final), and the top places of the **Bảng Thần Toán** (Oracle Ranking). On the leaderboard, ties share a place, and places stop once three members hold one: two people sharing 1st plus one 2nd means there's no 3rd.
+- **Prizes:** the final's champion, runner-up and 3rd place (two runners-up and no 3rd if they're level on points in the final), and the top places of the **Bảng Thần Toán** (Oracle Ranking). A correct prediction scores 1 point in the group stage, 2 in the semifinals and 3 in the final. On the leaderboard, ties share a place, and places stop once three members hold one: two people sharing 1st plus one 2nd means there's no 3rd.
 
 ---
 

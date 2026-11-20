@@ -20,14 +20,14 @@ const RANK_SEALS = [
  */
 function useRankMotion() {
   const rows = useRef(new Map<string, HTMLElement>());
-  const last = useRef(new Map<string, { top: number; correct: number }>());
+  const last = useRef(new Map<string, { top: number; points: number }>());
   useLayoutEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const [username, row] of rows.current) {
       const top = row.offsetTop;
-      const correct = Number(row.dataset.correct);
+      const points = Number(row.dataset.points);
       const before = last.current.get(username);
-      last.current.set(username, { top, correct });
+      last.current.set(username, { top, points });
       if (!before || reduced) continue;
       if (before.top !== top) {
         row.animate([{ transform: `translateY(${before.top - top}px)` }, { transform: 'translateY(0)' }], {
@@ -35,7 +35,7 @@ function useRankMotion() {
           easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
         });
       }
-      if (correct > before.correct) {
+      if (points > before.points) {
         row.animate([{ backgroundColor: 'rgb(240 200 104 / 0.55)' }, { backgroundColor: 'rgb(240 200 104 / 0)' }], { duration: 1800, easing: 'ease-out' });
       }
     }
@@ -73,7 +73,7 @@ interface PredictionsBoardProps {
 
 /**
  * The prediction leaderboard as a hanging scroll: the crowd's record on both
- * questions, then every member ranked by correct picks. Always rendered (an
+ * questions, then every member ranked by prediction points. Always rendered (an
  * empty board before the first predicted series finishes), so viewers always
  * know where it lives.
  */
@@ -84,7 +84,7 @@ export function PredictionsBoard({ tournament, onClose, className = '' }: Predic
   const places = leaderboardPlaces(leaderboard);
   const winnerRecord = tournament ? crowdRecord(tournament) : { called: 0, decided: 0 };
   const gamesRecord = tournament ? crowdGamesRecord(tournament) : { called: 0, decided: 0 };
-  const showGames = leaderboard.some((entry) => entry.gamesPicks > 0);
+  const showGames = leaderboard.some((entry) => entry.gamesPossible > 0);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const closable = onClose !== undefined;
@@ -102,6 +102,7 @@ export function PredictionsBoard({ tournament, onClose, className = '' }: Predic
             {t.predictions.title}
           </h2>
           <p className='text-xs text-muted'>{t.predictions.subtitle}</p>
+          <p className='text-xs text-muted'>{t.predictions.weights}</p>
           {(winnerRecord.decided > 0 || gamesRecord.decided > 0) && (
             <div className='mt-2 flex flex-col gap-0.5 text-xs text-muted'>
               {winnerRecord.decided > 0 && <p>{t.predictions.winnerRecord(winnerRecord.called, winnerRecord.decided)}</p>}
@@ -132,25 +133,25 @@ export function PredictionsBoard({ tournament, onClose, className = '' }: Predic
               <li
                 key={entry.username}
                 ref={rowRef(entry.username)}
-                data-correct={entry.correct}
+                data-points={entry.points}
                 className={`flex items-center gap-3 rounded-lg px-2 py-2 ${places[index].place === 1 ? 'bg-gold/10' : ''}`}
               >
                 <RankMark {...places[index]} />
                 <div className='min-w-0 flex-1'>
                   <p className={`truncate ${places[index].place ? 'font-bold text-fg' : 'font-semibold text-fg'}`}>{entry.name}</p>
                   <p className='text-xs text-muted'>
-                    {t.predictions.winner} {entry.winnerCorrect}/{entry.winnerPicks}
-                    {showGames && entry.gamesPicks > 0 && (
+                    {t.predictions.winner} {entry.winnerPoints}/{entry.winnerPossible}
+                    {showGames && entry.gamesPossible > 0 && (
                       <>
                         {' · '}
-                        {t.predictions.overUnder} {entry.gamesCorrect}/{entry.gamesPicks}
+                        {t.predictions.overUnder} {entry.gamesPoints}/{entry.gamesPossible}
                       </>
                     )}
                   </p>
                 </div>
-                <p className='shrink-0 text-right' aria-label={t.predictions.correctOf(entry.correct, entry.picks)}>
-                  <span className='text-xl font-extrabold text-fg'>{entry.correct}</span>
-                  <span className='text-sm text-muted'>/{entry.picks}</span>
+                <p className='shrink-0 text-right' aria-label={t.predictions.pointsOf(entry.points, entry.possible)}>
+                  <span className='text-xl font-extrabold text-fg'>{entry.points}</span>
+                  <span className='text-sm text-muted'>/{entry.possible}</span>
                 </p>
               </li>
             ))}
@@ -197,7 +198,7 @@ export function PredictionsDock({ tournament }: { tournament: Tournament | undef
         <span className='min-w-0 flex-1'>
           <span className='block text-sm font-extrabold text-fg'>{t.predictions.title}</span>
           <span className='block truncate text-xs text-muted'>
-            {leader ? t.predictions.leader(leader.name, leader.correct, leader.picks) : t.predictions.noRanking}
+            {leader ? t.predictions.leader(leader.name, leader.points, leader.possible) : t.predictions.noRanking}
           </span>
         </span>
         <ChevronUp size={18} className='shrink-0 text-muted' />

@@ -130,16 +130,26 @@ For each poll the host copies the question and answers from the app, posts a non
    - **From saved HTML:** save the votes table HTML and run `pnpm easypoll:json table.html -o votes.json`.
 2. Paste or upload the JSON in the matching section of the host page's poll panel. Winner answers are the players' display names, so each vote is read back to that player's username through the display names (emoji prefixes and case are ignored; a name of someone outside the series doesn't match). Voters are matched by username, ignoring case and a leading "@"; an older export that still carries `discordId` imports fine, the ID is ignored. Over/under votes are read from the first word of the answer in either language, accents ignored: "Trên"/"Over"/"Tài" is over, "Dưới"/"Under"/"Xỉu" is under. The app previews unmatched and duplicate votes, then saves the ballots.
 
-**The votes JSON is the only way to record a poll.** There's no typed-counts fallback, so every recorded vote names its voter and the predictor leaderboard stays complete throughout the event. Vote counts and shares are derived from the ballots. Predictions **never** affect the bracket. The viewer shows vote shares and the over/under line and result on each series card, how often the crowd was right on each question, and a leaderboard of members by correct predictions (winner, over/under and total) that updates as each series finishes.
+**The votes JSON is the only way to record a poll.** There's no typed-counts fallback, so every recorded vote names its voter and the predictor leaderboard stays complete throughout the event. Vote counts and shares are derived from the ballots. Predictions **never** affect the bracket. The viewer shows vote shares and the over/under line and result on each series card, how often the crowd was right on each question, and a leaderboard of members by prediction points (winner, over/under and total) that updates as each series finishes.
 
-**Leaderboard prize places.** Members are ranked by correct picks, then fewer picks (better accuracy), then name. Members level on both correct picks and picks share a place. Places 1st to 3rd go to whole tie groups in order and **stop as soon as three members hold one**, so ties never add winners:
+**Prediction points.** A correct pick, on either question, is worth more the later the phase (`PREDICTION_POINTS` in `format.ts`):
 
-| Scores (correct/picks)       | Places                                 |
+| Phase                                   | Points per correct pick |
+| --------------------------------------- | ----------------------- |
+| Group stage (and the 30-player survival game, which still decides who reaches the semifinals) | 1 |
+| Semifinals                              | 2                       |
+| Grand final                             | 3                       |
+
+Each member's score reads as points out of the points their picks could have won ("33/36"), shown per question and in total.
+
+**Leaderboard prize places.** Members are ranked by points, then fewer possible points (the same points from fewer or cheaper picks is better accuracy), then name. Members level on both points and possible points share a place. Places 1st to 3rd go to whole tie groups in order and **stop as soon as three members hold one**, so ties never add winners:
+
+| Scores (points/possible)     | Places                                 |
 | ---------------------------- | -------------------------------------- |
-| 9/9, 9/9, 8/9, 7/9           | 1st, 1st, 2nd, then #4 (no 3rd)        |
-| 9/9, 8/9, 8/9, 8/9, 7/9      | 1st, 2nd, 2nd, 2nd, then #5 (no 3rd)   |
-| 9/9, 9/9, 9/9, 9/9, 8/9      | 1st ×4, then #5 (no 2nd or 3rd)        |
-| 9/9, 8/9, 7/9, 7/9           | 1st, 2nd, 3rd, 3rd (a tie for the last place can't be split) |
+| 30/36, 30/36, 28/36, 27/36   | 1st, 1st, 2nd, then #4 (no 3rd)        |
+| 30/36, 28/36, 28/36, 28/36, 27/36 | 1st, 2nd, 2nd, 2nd, then #5 (no 3rd) |
+| 30/36, 30/36, 30/36, 30/36, 28/36 | 1st ×4, then #5 (no 2nd or 3rd)   |
+| 30/36, 28/36, 27/36, 27/36   | 1st, 2nd, 3rd, 3rd (a tie for the last place can't be split) |
 
 Everyone outside the places shows their position: the number of members above them, plus one.
 
@@ -283,7 +293,7 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 ### 6.1 Viewer page
 
 - **Layout**: a brush-script title under a "武林大会" seal, then the bracket in the main column and the prediction leaderboard beside it. On wide screens (≥ 1024 px) the leaderboard is a sticky side column, so it never scrolls away; on phones it docks at the bottom of the screen with the current leader and opens as a sheet.
-- **Bảng Thần Toán / Oracle Ranking** (the prediction leaderboard): a hanging scroll with the crowd's record on both questions and every member ranked by correct picks (winner, over/under and total). The prize places (§2.5: shared by ties, and no more places once three members hold one) wear the imperial exam's seals: 状元 Trạng nguyên for 1st, 榜眼 Bảng nhãn for 2nd, 探花 Thám hoa for 3rd. Everyone else shows their position number. It shows even before the first predicted series finishes, so viewers know where to look.
+- **Bảng Thần Toán / Oracle Ranking** (the prediction leaderboard): a hanging scroll with the scoring rule ("1 point in the group stage, 2 in the semifinals, 3 in the final"), the crowd's record on both questions, and every member ranked by prediction points (winner, over/under and total, each as points out of possible points). The prize places (§2.5: shared by ties, and no more places once three members hold one) wear the imperial exam's seals: 状元 Trạng nguyên for 1st, 榜眼 Bảng nhãn for 2nd, 探花 Thám hoa for 3rd. Everyone else shows their position number. It shows even before the first predicted series finishes, so viewers know where to look.
 - **Now playing**: the live series with each player's game placements and win pips, plus "next series in about N minutes" once there's enough timing data. When nothing is live: "Waiting for the host to start the next series" and the next series "on deck".
 - **Champion banner** (once the final is decided): the champion's gilded scroll, with two plaques below it: silver for the runner-up (亚军 seal) and bronze for 3rd place (季军 seal), or two silver plaques when 2nd and 3rd are level on points (§2.1). The final's card tags 2nd and 3rd with matching silver and bronze pills.
 - **Road to the semifinals** (group stage, and the survival game at 30 players): the qualification rule in plain words for the player count, that the semifinal groups are drawn at random, the group winners, and the host's picks; at 30 players also who plays the survival game (or a note while its last seat waits for a draw) and who it knocked out, struck through among the winners.

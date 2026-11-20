@@ -93,22 +93,31 @@ Predictions run as EasyPolls on Discord and never affect the bracket. Every one 
 
 ### The Oracle Ranking (Bảng Thần Toán)
 
-The viewer page ranks every voter as series finish:
+The viewer page ranks every voter as series finish. A correct pick on either question is worth more the later the phase:
 
-1. Most correct picks, counting both questions.
-2. Then fewer picks, since the same score from fewer votes means better accuracy.
+| Phase       | Polls | Points per correct pick | Points available |
+| ----------- | ----- | ----------------------- | ---------------- |
+| Group stage | 18    | 1                       | 18               |
+| Semifinals  | 6     | 2                       | 12               |
+| Grand final | 2     | 3                       | 6                |
+| **Total**   | **26** |                        | **36**           |
+
+So a perfect run is 36 points, and calling the final right on both questions is worth as much as six group-stage polls. Each score reads as points out of the points the member's picks could have won, for example 33/36.
+
+1. Most points, counting both questions.
+2. Then fewer possible points, since the same points from fewer or cheaper picks means better accuracy.
 3. Then by name.
 
-**Prize places:** members level on both correct picks and picks share a place. Places go to whole tie groups in order and **stop as soon as three members hold one**, so ties never add extra winners:
+**Prize places:** members level on both points and possible points share a place. Places go to whole tie groups in order and **stop as soon as three members hold one**, so ties never add extra winners:
 
-| Scores (correct/picks)    | Places                                                        |
+| Scores (points/possible)  | Places                                                        |
 | ------------------------- | ------------------------------------------------------------- |
-| 20/26, 19/26, 18/26       | 1st, 2nd, 3rd                                                 |
-| 20/26, 20/26, 18/26, 17/26 | 1st, 1st, 2nd; no 3rd place                                  |
-| 20/26, 19/26, 19/26, 19/26 | 1st, 2nd, 2nd, 2nd; no 3rd place                             |
-| 20/26, 20/26, 20/26, 20/26 | 1st ×4; no 2nd or 3rd place                                  |
-| 20/26, 19/26, 18/26, 18/26 | 1st, 2nd, 3rd, 3rd (a tie for the last place can't be split) |
-| 20/26, 20/24              | 20/24 is 1st and 20/26 is 2nd (fewer picks wins the tie)     |
+| 30/36, 28/36, 27/36       | 1st, 2nd, 3rd                                                 |
+| 30/36, 30/36, 28/36, 27/36 | 1st, 1st, 2nd; no 3rd place                                  |
+| 30/36, 28/36, 28/36, 28/36 | 1st, 2nd, 2nd, 2nd; no 3rd place                             |
+| 30/36, 30/36, 30/36, 30/36 | 1st ×4; no 2nd or 3rd place                                  |
+| 30/36, 28/36, 27/36, 27/36 | 1st, 2nd, 3rd, 3rd (a tie for the last place can't be split) |
+| 30/36, 30/34              | 30/34 is 1st and 30/36 is 2nd (fewer possible points wins the tie) |
 
 ## 8. Timing
 

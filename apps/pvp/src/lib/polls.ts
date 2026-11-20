@@ -1,5 +1,5 @@
 import type { Ballot, GamesBallot, GamesPick, PlayerId, Series, Tournament } from '../types/tournament.js';
-import { GAMES_LINES } from './format.js';
+import { GAMES_LINES, PREDICTION_POINTS } from './format.js';
 import type { Translatable } from './i18n.js';
 import { nameLookup, normalizeUsername } from './names.js';
 import { isSeriesComplete, seriesWinner, survivalLoser } from './series.js';
@@ -242,16 +242,17 @@ export function crowdGamesRecord(tournament: Tournament): { called: number; deci
   return { called, decided };
 }
 
+/** Points won on each question, out of the points the member's picks could have won (see PREDICTION_POINTS). */
 export interface LeaderboardEntry {
   username: string;
   /** The display name, else the username. */
   name: string;
-  winnerCorrect: number;
-  winnerPicks: number;
-  gamesCorrect: number;
-  gamesPicks: number;
-  correct: number;
-  picks: number;
+  winnerPoints: number;
+  winnerPossible: number;
+  gamesPoints: number;
+  gamesPossible: number;
+  points: number;
+  possible: number;
 }
 
 export interface LeaderboardPlace {
@@ -262,8 +263,8 @@ export interface LeaderboardPlace {
 }
 
 /**
- * Prize places for a sorted leaderboard. Members level on correct picks and
- * picks share a place. Places go to whole tie groups in order and stop once
+ * Prize places for a sorted leaderboard. Members level on points and possible
+ * points share a place. Places go to whole tie groups in order and stop once
  * three members hold one, so ties never add winners: two members sharing 1st
  * leave room only for a 2nd, and four sharing 1st leave no other place.
  */
@@ -274,7 +275,7 @@ export function leaderboardPlaces(entries: readonly LeaderboardEntry[]): Leaderb
   let groupPlace: LeaderboardPlace['place'];
   return entries.map((entry, index) => {
     const previous = entries[index - 1];
-    if (!previous || previous.correct !== entry.correct || previous.picks !== entry.picks) {
+    if (!previous || previous.points !== entry.points || previous.possible !== entry.possible) {
       groupRank = index + 1;
       if (placed < 3) {
         place += 1;
@@ -288,7 +289,7 @@ export function leaderboardPlaces(entries: readonly LeaderboardEntry[]): Leaderb
   });
 }
 
-/** Discord members ranked by correct picks across both predictions, over finished series. */
+/** Discord members ranked by prediction points across both questions, over finished series. */
 export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[] {
   const entries = new Map<string, LeaderboardEntry>();
   const nameOf = nameLookup(tournament);
@@ -296,40 +297,43 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
     const entry = entries.get(username) ?? {
       username,
       name: nameOf(username),
-      winnerCorrect: 0,
-      winnerPicks: 0,
-      gamesCorrect: 0,
-      gamesPicks: 0,
-      correct: 0,
-      picks: 0,
+      winnerPoints: 0,
+      winnerPossible: 0,
+      gamesPoints: 0,
+      gamesPossible: 0,
+      points: 0,
+      possible: 0,
     };
     entries.set(username, entry);
     return entry;
   };
   for (const series of tournament.series) {
+    const worth = PREDICTION_POINTS[series.stage];
     const answer = pollAnswer(series);
     if (answer) {
       for (const ballot of series.poll?.ballots ?? []) {
         const entry = entryFor(ballot.username);
-        entry.winnerPicks += 1;
-        if (ballot.playerId === answer) entry.winnerCorrect += 1;
+        entry.winnerPossible += worth;
+        if (ballot.playerId === answer) entry.winnerPoints += worth;
       }
     }
     const outcome = gamesOutcome(series);
     if (outcome && outcome !== 'push') {
       for (const ballot of series.gamesPoll?.ballots ?? []) {
         const entry = entryFor(ballot.username);
-        entry.gamesPicks += 1;
-        if (ballot.pick === outcome) entry.gamesCorrect += 1;
+        entry.gamesPossible += worth;
+        if (ballot.pick === outcome) entry.gamesPoints += worth;
       }
     }
   }
   for (const entry of entries.values()) {
-    entry.correct = entry.winnerCorrect + entry.gamesCorrect;
-    entry.picks = entry.winnerPicks + entry.gamesPicks;
+    entry.points = entry.winnerPoints + entry.gamesPoints;
+    entry.possible = entry.winnerPossible + entry.gamesPossible;
   }
-  // Fewer picks for the same score means better accuracy, so it ranks higher.
-  return [...entries.values()].filter((entry) => entry.picks > 0).sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.name.localeCompare(b.name));
+  // The same points out of fewer possible ones means better accuracy, so it ranks higher.
+  return [...entries.values()]
+    .filter((entry) => entry.possible > 0)
+    .sort((a, b) => b.points - a.points || a.possible - b.possible || a.name.localeCompare(b.name));
 }
 
 /** One recorded poll: a series' first poll (who wins, or who goes out) or its over/under. */

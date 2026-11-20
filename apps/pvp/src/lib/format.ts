@@ -38,6 +38,14 @@ export const WINS_NEEDED: Record<SeriesStage, 1 | 2 | 3> = { group: 2, survival:
 // The survival game is always one game, so it has no over/under poll (see hasGamesPrediction); its entry only completes the record.
 export const GAMES_LINES: Record<SeriesStage, number> = { group: 2.5, survival: 0.5, semi: 2.5, final: 4.5 };
 
+/**
+ * Leaderboard points for each correct prediction (winner or over/under), by
+ * phase: later series are rarer and decide more, so they're worth more. The
+ * survival game still decides who reaches the semifinals, so it scores like
+ * the group stage.
+ */
+export const PREDICTION_POINTS: Record<SeriesStage, number> = { group: 1, survival: 1, semi: 2, final: 3 };
+
 export function isValidGamesLine(line: unknown): line is number {
   return typeof line === 'number' && Number.isFinite(line) && line >= 0.5 && line <= 10 && Number.isInteger(line * 2);
 }

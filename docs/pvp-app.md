@@ -44,6 +44,8 @@ Every match is a 1v1v1 game in a **group of three**. A group plays a **series**:
 
 \* Assuming evenly matched players, a first-to-2 series lasts 2.89 games on average and the first-to-3 final 5.05.
 
+A standalone write-up of the 27-player format, for sharing with the guild, is [pvp-format-27.md](pvp-format-27.md).
+
 At 21 and 24 players the host's picks are deliberately a judgement call rather than a formula (no runner-up ranking, no play-in). At the end of the group stage the app lists every non-winner by group-stage record as a guide, and viewers see the picks as they're made.
 
 **The survival game ("Trận sinh tử", 30 players only).** There's one group winner too many, and a rule decides who goes out, not the host:

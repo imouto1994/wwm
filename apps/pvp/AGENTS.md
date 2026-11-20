@@ -92,7 +92,7 @@ Read the full guide in [docs/pvp-app.md §6.4](../../docs/pvp-app.md#64-visual-s
 1. Put rules in `src/lib` as pure functions (usually a new `Action` in `reducer.ts`), and wire the UI through `useHostTournament().dispatch`. Add any new text to both mappings in `src/lib/i18n.ts`.
 2. **No automated tests in this app, by the owner's choice.** Don't add test files or a test runner; check changes by running the dev server end to end (host and viewer tabs side by side).
 3. Comments explain the *why* (a repo-wide rule).
-4. **Update [docs/pvp-app.md](../../docs/pvp-app.md)** whenever rules, the data model, the API or the UI change. If a host step, a host button label or a host tool changes, also update the host's event-day list, [docs/pvp-host-checklist.md](../../docs/pvp-host-checklist.md).
+4. **Update [docs/pvp-app.md](../../docs/pvp-app.md)** whenever rules, the data model, the API or the UI change. If a host step, a host button label or a host tool changes, also update the host's event-day list, [docs/pvp-host-checklist.md](../../docs/pvp-host-checklist.md). If a rule that applies at 27 players changes, also update [docs/pvp-format-27.md](../../docs/pvp-format-27.md).
 5. If you change the document shape, bump `schemaVersion` and teach `parseTournament` to read the old shape: a tournament may be stored in Redis when you deploy.
 
 ## Commands (run from repo root)

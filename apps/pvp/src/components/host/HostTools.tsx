@@ -1,5 +1,7 @@
 import { Button } from '@/components/Button';
 import { DisplayNamesEditor } from '@/components/host/DisplayNamesEditor';
+import { MissingVotes } from '@/components/host/MissingVotes';
+import { UnnamedVoters } from '@/components/host/UnnamedVoters';
 import type { HostController } from '@/hooks/useHostTournament';
 import { useI18n } from '@/hooks/useI18n';
 import { describeApiError, fetchHistory } from '@/lib/apiClient';
@@ -45,6 +47,7 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
   const series = playableSeries(tournament);
   // The survival game is decided by who finishes 3rd, so a winner ruling doesn't apply there.
   const overridable = series.filter((entry) => entry.stage !== 'survival');
+  const hasPolls = tournament.series.some((entry) => entry.poll || entry.gamesPoll);
   const [overrideSeriesId, setOverrideSeriesId] = useState('');
   const [overridePlayerId, setOverridePlayerId] = useState('');
   const [reason, setReason] = useState('');
@@ -78,6 +81,18 @@ export function HostTools({ host, tournament, pin }: HostToolsProps) {
     <details className='rounded-lg border border-border bg-surface p-4'>
       <summary className='cursor-pointer text-sm font-semibold uppercase tracking-wide text-muted'>{t.tools.title}</summary>
       <div className='mt-4 flex flex-col gap-4'>
+        {/* The poll follow-ups come first, since they're used again and again during the event. */}
+        {hasPolls && (
+          <Tool title={t.missing.title} description={t.missing.help}>
+            <MissingVotes tournament={tournament} />
+          </Tool>
+        )}
+        {hasPolls && (
+          <Tool title={t.unnamed.title} description={t.unnamed.help}>
+            <UnnamedVoters host={host} tournament={tournament} />
+          </Tool>
+        )}
+
         {overridable.length > 0 && (
           <Tool title={t.tools.overrideTitle} description={t.tools.overrideHelp}>
             <select

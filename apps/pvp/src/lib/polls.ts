@@ -331,3 +331,47 @@ export function predictionLeaderboard(tournament: Tournament): LeaderboardEntry[
   // Fewer picks for the same score means better accuracy, so it ranks higher.
   return [...entries.values()].filter((entry) => entry.picks > 0).sort((a, b) => b.correct - a.correct || a.picks - b.picks || a.name.localeCompare(b.name));
 }
+
+/** One recorded poll: a series' first poll (who wins, or who goes out) or its over/under. */
+export interface RecordedPoll {
+  series: Series;
+  kind: 'winner' | 'games';
+}
+
+export interface MissingVoter {
+  username: string;
+  name: string;
+  missed: RecordedPoll[];
+}
+
+/**
+ * Members who voted in at least one recorded poll but not in all of them,
+ * with the polls they missed, most missed first. Only people seen in some
+ * poll count, since the display names also list players who never predict.
+ */
+export function missingVoters(tournament: Tournament): { polls: RecordedPoll[]; voters: MissingVoter[] } {
+  const recorded: { poll: RecordedPoll; voted: Set<string> }[] = [];
+  for (const series of tournament.series) {
+    if (series.poll) recorded.push({ poll: { series, kind: 'winner' }, voted: new Set(series.poll.ballots.map((ballot) => ballot.username)) });
+    if (series.gamesPoll) recorded.push({ poll: { series, kind: 'games' }, voted: new Set(series.gamesPoll.ballots.map((ballot) => ballot.username)) });
+  }
+  const nameOf = nameLookup(tournament);
+  const everyone = new Set(recorded.flatMap(({ voted }) => [...voted]));
+  const voters = [...everyone]
+    .map((username) => ({ username, name: nameOf(username), missed: recorded.filter(({ voted }) => !voted.has(username)).map(({ poll }) => poll) }))
+    .filter((voter) => voter.missed.length > 0)
+    .sort((a, b) => b.missed.length - a.missed.length || a.name.localeCompare(b.name));
+  return { polls: recorded.map(({ poll }) => poll), voters };
+}
+
+/** Voters in recorded polls who aren't in the display names yet, so screens show their username; with how many polls each voted in. */
+export function unnamedVoters(tournament: Tournament): { username: string; polls: number }[] {
+  const named = new Set(Object.keys(tournament.displayNames));
+  const polls = new Map<string, number>();
+  for (const series of tournament.series) {
+    for (const ballots of [series.poll?.ballots ?? [], series.gamesPoll?.ballots ?? []]) {
+      for (const { username } of ballots) if (!named.has(username)) polls.set(username, (polls.get(username) ?? 0) + 1);
+    }
+  }
+  return [...polls].map(([username, count]) => ({ username, polls: count })).sort((a, b) => a.username.localeCompare(b.username));
+}

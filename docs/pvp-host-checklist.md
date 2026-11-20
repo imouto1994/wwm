@@ -71,6 +71,8 @@ Tip: every group is known once the group stage starts, so you can post the polls
 - [ ] Export each poll's votes: in the EasyPoll dashboard, open the poll's votes page and paste `easypoll-devtools.js` into the Chrome DevTools console. It copies the votes JSON. If the votes span several pages, run it on each page.
 - [ ] In the matching poll section, paste into **Nhập JSON phiếu bầu** (Import votes JSON), check the preview, then **Lưu N phiếu** (Save N votes). Do this for **both** polls.
 - [ ] If the preview lists answers it couldn't match, check that the poll answers match the players' display names, then import again. A new import replaces the old one.
+- [ ] Optional: **Công cụ BTC → Ai còn thiếu phiếu?** (Host tools → Who hasn't voted in every poll) lists everyone who skipped some of the recorded polls, with a bullet list of which ones. **Copy** next to the count copies a reminder for everyone; the **Copy** on each member copies just theirs, for a direct message.
+- [ ] Optional: **Công cụ BTC → Người bầu chưa có tên hiển thị** (Host tools → Voters without a display name) lists voters who show up as bare usernames on the leaderboard. **Copy** the list to ask who they are, or press **Thêm N người vào danh sách tên hiển thị** (Add them to the display names) and rename them in **Tên hiển thị** (Display names).
 - [ ] The group's card shows the winner and the vote percentages.
 
 ## 4. End of the group stage

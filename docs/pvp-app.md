@@ -245,7 +245,7 @@ Framework-free functions in [apps/pvp/src/lib](../apps/pvp/src/lib). They use re
 | `reducer.ts`       | Every host action and stage transition; replacement candidates                                           |
 | `validate.ts`      | `parseTournament` for untrusted input                                                                    |
 | `names.ts`         | Username normalizing and format check, display-name lookup with username fallback, parsing of the pasted display-name JSON |
-| `polls.ts`         | EasyPoll JSON parsing and matching (voters by username; winner answers read back to usernames through `displayNameIndex`, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard and its prize places (`leaderboardPlaces`) |
+| `polls.ts`         | EasyPoll JSON parsing and matching (voters by username; winner answers read back to usernames through `displayNameIndex`, over/under by keyword), vote shares, over/under outcome (over, under, push, void), crowd records, prediction leaderboard and its prize places (`leaderboardPlaces`), members who missed recorded polls (`missingVoters`), voters without a display name (`unnamedVoters`) |
 | `i18n.ts`          | The English and Vietnamese message mappings, `Translatable`, and locale-aware number, time and "ago" formatting |
 | `eta.ts`           | Average minutes per game from save timestamps (gaps over 15 min ignored, at least 3 samples) and expected games left |
 
@@ -302,7 +302,11 @@ The host page uses `crypto.getRandomValues` for draws, so no one can claim the d
 - **Poll panel**: two sections, "who wins?" and (except single matches) "over/under games" with the phase's fixed line. Each has the question and every answer with its own copy button (EasyPoll takes each answer in a separate field), a votes JSON import with preview (the only way to record votes), and a clear button once recorded.
 - **Stage gate** (once every series in the stage is decided): who's through; at 21 or 24 players, the semifinal picker (candidates with group and record; it folds to a one-line summary with "Change" once complete); at 30 players, the 10 winners best first with their records, the three survival seats marked (certain seats solid, players tied for the last seat dashed until the draw); pending ties and the draw button, recent draws, "Draw the semifinal groups" once the semifinalists are settled, then the drawn groups (private to the host) with tap-to-swap and "Redraw", and the advance button ("Start the survival game", "Start the semifinals", which needs the draw, "Start the grand final", "Finish the tournament"). After the survival game, the gate names who went out; after the final, the champion, 2nd and 3rd.
 - **Save indicator**: "Saving…", "All changes saved", or "Not saved" with a retry button.
-- **Host tools**: see §2.4, plus "Display names" once the event has started (the same JSON editor as in setup, for typos and voters missing from the list), "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
+- **Host tools**: first the two poll follow-ups, once a poll is recorded:
+  - **Who hasn't voted in every poll**: everyone who voted in at least one recorded poll but not all of them, most missed first, each with a bullet list of the polls they missed. A copy button per member and one for everyone produce Discord-ready text: `@username (Name)` followed by `- Bảng 3 · Ai thắng?` lines, which Discord renders as a list. People who never voted at all aren't listed, since the display names also hold players who never predict.
+  - **Voters without a display name**: voters in recorded polls who aren't in the display names, so the leaderboard shows their username, with how many polls each voted in. Copy the list (`- @username` lines) to ask who they are, or add them all at once with their username as a stand-in name, then rename them in the display-name editor.
+
+  Then §2.4's tools, plus "Display names" once the event has started (the same JSON editor as in setup, for typos and voters missing from the list), "Restore an earlier save" (last 50 saves), "Download JSON" (backup after each stage), and "Reset" (type RESET to confirm). Destructive tools ask for confirmation.
 
 ### 6.3 Languages
 
